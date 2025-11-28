@@ -75,7 +75,7 @@ async function connectToServer(baseUrl: string) {
     onStateChange: (state) => {
       if (state.isPlaying) {
         window.setStatus?.(
-          `Playing · ${state.volume}%${state.muted ? " (muted)" : ""}`,
+          `Playing · Volume: ${state.volume}%${state.muted ? " (muted)" : ""}`,
         );
       } else {
         window.setStatus?.("Stopped");
