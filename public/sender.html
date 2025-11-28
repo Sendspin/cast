@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Resonate over Cast</title>
+  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    button { padding: 10px 20px; font-size: 16px; margin: 5px; cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #status { margin: 20px 0; padding: 10px; background: #f0f0f0; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Resonate over Cast</h1>
+
+  <button id="castBtn" onclick="startCasting()" disabled>Cast to Device</button>
+  <button id="stopBtn" onclick="stopCasting()" disabled>Stop Casting</button>
+
+  <div id="status">Loading Cast SDK...</div>
+
+  <script>
+    const APP_ID = '938CBF87';
+    let castContext = null;
+    let castSession = null;
+
+    window['__onGCastApiAvailable'] = function(isAvailable) {
+      if (isAvailable) {
+        initializeCast();
+      } else {
+        document.getElementById('status').textContent = 'Cast SDK not available. Are you using Chrome?';
+      }
+    };
+
+    function initializeCast() {
+      try {
+        castContext = cast.framework.CastContext.getInstance();
+        castContext.setOptions({
+          receiverApplicationId: APP_ID,
+          autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+        });
+
+        castContext.addEventListener(
+          cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
+          (event) => {
+            const state = event.sessionState;
+
+            if (state === cast.framework.SessionState.SESSION_STARTED) {
+              castSession = castContext.getCurrentSession();
+              document.getElementById('stopBtn').disabled = false;
+              document.getElementById('castBtn').disabled = true;
+              document.getElementById('status').textContent = 'Connected! Receiver is now active.';
+            } else if (state === cast.framework.SessionState.SESSION_ENDED) {
+              castSession = null;
+              document.getElementById('stopBtn').disabled = true;
+              document.getElementById('castBtn').disabled = false;
+              document.getElementById('status').textContent = 'Ready to cast';
+            }
+          }
+        );
+
+        document.getElementById('castBtn').disabled = false;
+        document.getElementById('status').textContent = 'Ready to cast';
+      } catch (e) {
+        document.getElementById('status').textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function startCasting() {
+      if (!castContext) return;
+
+      castContext.requestSession().catch((error) => {
+        document.getElementById('status').textContent = 'Cast error: ' + error;
+      });
+    }
+
+    function stopCasting() {
+      if (castSession) {
+        castSession.endSession(true);
+      }
+    }
+  </script>
+</body>
+</html>
