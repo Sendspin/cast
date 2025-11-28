@@ -4,26 +4,16 @@ declare global {
   interface Window {
     setStatus?: (text: string) => void;
     setDebug?: (text: string) => void;
+    cast?: any;
   }
 }
 
-// Get server URL from query params or localStorage
-function getBaseUrl(): string {
+const CAST_NAMESPACE = "urn:x-cast:resonate";
+
+// Get server URL from query params (for local testing)
+function getBaseUrlFromParams(): string | null {
   const params = new URLSearchParams(window.location.search);
-  const paramUrl = params.get("server");
-  if (paramUrl) {
-    localStorage.setItem("resonate_server_url", paramUrl);
-    return paramUrl;
-  }
-
-  const storedUrl = localStorage.getItem("resonate_server_url");
-  if (storedUrl) {
-    return storedUrl;
-  }
-
-  // No server configured - show error
-  window.setStatus?.("No server configured. Add ?server=http://your-server:8095");
-  throw new Error("No server URL configured");
+  return params.get("server");
 }
 
 // Generate or get player ID (persisted in localStorage)
@@ -63,15 +53,12 @@ function updateDebug(player: ResonatePlayer) {
   window.setDebug?.(debugText);
 }
 
-// Initialize
-async function init() {
-  console.log("Resonate: Initializing Cast Receiver...");
-  window.setStatus?.("Connecting...");
-
-  const baseUrl = getBaseUrl();
+// Connect to Resonate server
+async function connectToServer(baseUrl: string) {
   const playerId = getPlayerId();
 
   console.log("Resonate: Connecting to", baseUrl, "as", playerId);
+  window.setStatus?.("Connecting to " + baseUrl);
 
   const player = new ResonatePlayer({
     playerId,
@@ -113,9 +100,65 @@ async function init() {
   (window as any).player = player;
 }
 
+// Initialize Cast Receiver
+function initCastReceiver() {
+  const castFramework = window.cast?.framework;
+  const context = castFramework?.CastReceiverContext?.getInstance();
+
+  if (!context) {
+    console.log("Resonate: Cast SDK not available, checking query params...");
+    // Fallback for local testing without Cast SDK
+    const paramUrl = getBaseUrlFromParams();
+    if (paramUrl) {
+      connectToServer(paramUrl);
+    } else {
+      window.setStatus?.("No server configured. Add ?server=http://ip:8927");
+    }
+    return;
+  }
+
+  console.log("Resonate: Initializing Cast Receiver...");
+  window.setStatus?.("Waiting for sender...");
+
+  // Cast event listeners
+  context.addEventListener(castFramework.system.EventType.READY, () => {
+    console.log("Resonate: Cast receiver READY");
+  });
+
+  context.addEventListener(castFramework.system.EventType.SENDER_CONNECTED, () => {
+    console.log("Resonate: Sender connected");
+  });
+
+  context.addEventListener(castFramework.system.EventType.SENDER_DISCONNECTED, () => {
+    console.log("Resonate: Sender disconnected");
+    window.setStatus?.("Disconnected");
+  });
+
+  context.addEventListener(castFramework.system.EventType.ERROR, (event: any) => {
+    console.error("Resonate: Cast error:", event);
+  });
+
+  // Listen for custom messages with server URL
+  context.addCustomMessageListener(CAST_NAMESPACE, (event: any) => {
+    console.log("Resonate: Received message from sender:", event.data);
+    const serverUrl = event.data?.serverUrl;
+    if (serverUrl) {
+      connectToServer(serverUrl);
+    }
+  });
+
+  // Start the Cast receiver with options
+  const options = new castFramework.CastReceiverOptions();
+  options.disableIdleTimeout = true;
+  options.maxInactivity = 3600; // 1 hour max inactivity
+
+  context.start(options);
+  console.log("Resonate: Cast Receiver started");
+}
+
 // Start when DOM is ready
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener("DOMContentLoaded", initCastReceiver);
 } else {
-  init();
+  initCastReceiver();
 }

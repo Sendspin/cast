@@ -42,53 +42,12 @@
   <div id="status">Initializing...</div>
   <div id="debug"></div>
   <script>
-    // UI helpers
-    function setStatus(text) {
+    // UI helpers - exposed globally for main.ts
+    window.setStatus = function(text) {
       document.getElementById('status').textContent = text;
     }
-    function setDebug(text) {
+    window.setDebug = function(text) {
       document.getElementById('debug').textContent = text;
-    }
-
-    // Initialize Cast Receiver SDK
-    try {
-      const context = cast.framework.CastReceiverContext.getInstance();
-
-      context.addEventListener(cast.framework.system.EventType.READY, () => {
-        console.log('Resonate: Cast receiver READY');
-        setStatus('Waiting for connection...');
-      });
-
-      context.addEventListener(cast.framework.system.EventType.SENDER_CONNECTED, () => {
-        console.log('Resonate: Sender connected');
-      });
-
-      context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, () => {
-        console.log('Resonate: Sender disconnected');
-        setStatus('Disconnected');
-      });
-
-      context.addEventListener(cast.framework.system.EventType.ERROR, (event) => {
-        console.error('Resonate: Cast error:', event);
-        setStatus('Error');
-      });
-
-      console.log('Resonate: Starting receiver...');
-
-      // Disable idle timeout - we handle our own playback
-      const options = new cast.framework.CastReceiverOptions();
-      options.disableIdleTimeout = true;
-      options.maxInactivity = 3600; // 1 hour max inactivity (if disableIdleTimeout doesn't work)
-
-      context.start(options);
-
-      // Expose for UI updates from main.ts
-      window.castContext = context;
-      window.setStatus = setStatus;
-      window.setDebug = setDebug;
-    } catch (e) {
-      console.error('Cast SDK init error:', e);
-      setStatus('Cast SDK error');
     }
   </script>
   <script type="module" src="./src/main.ts"></script>

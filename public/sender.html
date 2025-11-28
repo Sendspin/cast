@@ -4,14 +4,30 @@
   <title>Resonate over Cast</title>
   <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
+    body { font-family: sans-serif; padding: 20px; max-width: 400px; }
     button { padding: 10px 20px; font-size: 16px; margin: 5px; cursor: pointer; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     #status { margin: 20px 0; padding: 10px; background: #f0f0f0; border-radius: 4px; }
+    .server-config { margin: 20px 0; }
+    .server-config label { display: block; margin-bottom: 5px; font-weight: bold; }
+    .server-config input {
+      padding: 8px;
+      font-size: 16px;
+      width: 200px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .server-config small { color: #666; display: block; margin-top: 5px; }
   </style>
 </head>
 <body>
   <h1>Resonate over Cast</h1>
+
+  <div class="server-config">
+    <label for="serverIp">Music Assistant Server IP:</label>
+    <input type="text" id="serverIp" placeholder="192.168.1.100">
+    <small>Will connect to ws://&lt;ip&gt;:8927/resonate</small>
+  </div>
 
   <button id="castBtn" onclick="startCasting()" disabled>Cast to Device</button>
   <button id="stopBtn" onclick="stopCasting()" disabled>Stop Casting</button>
@@ -20,8 +36,22 @@
 
   <script>
     const APP_ID = '938CBF87';
+    const CAST_NAMESPACE = 'urn:x-cast:resonate';
     let castContext = null;
     let castSession = null;
+
+    // Load saved IP from localStorage
+    const savedIp = localStorage.getItem('resonate_server_ip');
+    if (savedIp) {
+      document.getElementById('serverIp').value = savedIp;
+    }
+
+    function getServerUrl() {
+      const ip = document.getElementById('serverIp').value.trim();
+      if (!ip) return null;
+      localStorage.setItem('resonate_server_ip', ip);
+      return `http://${ip}:8927`;
+    }
 
     window['__onGCastApiAvailable'] = function(isAvailable) {
       if (isAvailable) {
@@ -48,7 +78,21 @@
               castSession = castContext.getCurrentSession();
               document.getElementById('stopBtn').disabled = false;
               document.getElementById('castBtn').disabled = true;
-              document.getElementById('status').textContent = 'Connected! Receiver is now active.';
+
+              // Send server URL to receiver
+              const serverUrl = getServerUrl();
+              const ip = document.getElementById('serverIp').value.trim();
+              if (serverUrl) {
+                castSession.sendMessage(CAST_NAMESPACE, { serverUrl })
+                  .then(() => {
+                    document.getElementById('status').textContent = 'Connected! Connecting to ws://' + ip + ':8927/resonate';
+                  })
+                  .catch((err) => {
+                    document.getElementById('status').textContent = 'Connected but failed to send config: ' + err;
+                  });
+              } else {
+                document.getElementById('status').textContent = 'Connected but no server IP configured!';
+              }
             } else if (state === cast.framework.SessionState.SESSION_ENDED) {
               castSession = null;
               document.getElementById('stopBtn').disabled = true;
@@ -67,6 +111,12 @@
 
     function startCasting() {
       if (!castContext) return;
+
+      const serverUrl = getServerUrl();
+      if (!serverUrl) {
+        document.getElementById('status').textContent = 'Please enter server IP first';
+        return;
+      }
 
       castContext.requestSession().catch((error) => {
         document.getElementById('status').textContent = 'Cast error: ' + error;
