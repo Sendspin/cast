@@ -101,7 +101,7 @@ async function connectToServer(baseUrl: string) {
     audioOutputMode: "direct", // Output directly to audioContext.destination
     clientName,
     syncDelay: providedSyncDelay,
-    bufferCapacity: 1024 * 1024 * 1.5, // 1.5MB (GC4A memory constraint)
+    bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
     supportedFormats: [
       // PCM only for GC4A 2.0 compatibility (no decodeAudioData for FLAC/Opus)
       { codec: "pcm", sample_rate: 48000, channels: 2, bit_depth: 16 },
@@ -226,6 +226,12 @@ function initCastReceiver() {
       // Store the sync delay provided by Music Assistant
       providedSyncDelay = syncDelay;
       console.log("Resonate: Using sync delay from sender:", syncDelay, "ms");
+      // Update existing player if already connected
+      const existingPlayer = (window as any).player as ResonatePlayer | undefined;
+      if (existingPlayer) {
+        existingPlayer.setSyncDelay(syncDelay);
+        console.log("Resonate: Updated sync delay on existing player");
+      }
     }
     if (serverUrl) {
       connectToServer(serverUrl);
