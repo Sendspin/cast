@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "resonate-js": "file:../resonate-js"
+    "@music-assistant/resonate-js": "^0.1.0"
   },
   "devDependencies": {
     "typescript": "5.9.3",

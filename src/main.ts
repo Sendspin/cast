@@ -1,4 +1,4 @@
-import { ResonatePlayer } from "resonate-js";
+import { ResonatePlayer } from "@music-assistant/resonate-js";
 
 declare global {
   interface Window {
