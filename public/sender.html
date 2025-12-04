@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Resonate over Cast Demo</title>
+  <title>Sendspin over Cast Demo</title>
   <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
   <style>
     * { box-sizing: border-box; }
@@ -158,14 +158,14 @@
   </style>
 </head>
 <body>
-  <h1>Resonate over Cast Demo</h1>
+  <h1>Sendspin over Cast Demo</h1>
   <p class="description">
-    A proof-of-concept implementation of the Resonate protocol inside a Chromecast receiver app.
-    Since Resonate uses standard WebSockets, it can run on pretty much anything, including
+    A proof-of-concept implementation of the Sendspin protocol inside a Chromecast receiver app.
+    Since Sendspin uses standard WebSockets, it can run on pretty much anything, including
     Google Cast and Cast Audio devices. This demo enables
     on-the-fly speaker grouping without Google Home setup, flexible device combinations
     beyond Google's restrictions (like pairing a Home Mini with a TV), and grouping with
-    other Resonate-compatible speakers.
+    other Sendspin-compatible speakers.
   </p>
 
   <div class="disclaimer">
@@ -181,7 +181,7 @@
     <div class="server-config">
       <label for="serverIp">Music Assistant Server IP</label>
       <input type="text" id="serverIp" placeholder="192.168.1.100">
-      <small>Connects via WebSocket to ws://&lt;ip&gt;:8927/resonate</small>
+      <small>Connects via WebSocket to ws://&lt;ip&gt;:8927/sendspin</small>
     </div>
 
     <div class="server-config" style="margin-top: 16px;">
@@ -200,16 +200,16 @@
 
   <script>
     const APP_ID = '938CBF87';
-    const CAST_NAMESPACE = 'urn:x-cast:resonate';
+    const CAST_NAMESPACE = 'urn:x-cast:sendspin';
     let castContext = null;
     let castSession = null;
 
     // Load saved settings from localStorage
-    const savedIp = localStorage.getItem('resonate_server_ip');
+    const savedIp = localStorage.getItem('sendspin_server_ip');
     if (savedIp) {
       document.getElementById('serverIp').value = savedIp;
     }
-    const savedSyncDelay = localStorage.getItem('resonate_sync_delay');
+    const savedSyncDelay = localStorage.getItem('sendspin_sync_delay');
     if (savedSyncDelay) {
       document.getElementById('syncDelay').value = savedSyncDelay;
     }
@@ -217,13 +217,13 @@
     function getServerUrl() {
       const ip = document.getElementById('serverIp').value.trim();
       if (!ip) return null;
-      localStorage.setItem('resonate_server_ip', ip);
+      localStorage.setItem('sendspin_server_ip', ip);
       return `http://${ip}:8927`;
     }
 
     function getSyncDelay() {
       const delay = parseInt(document.getElementById('syncDelay').value, 10) || 0;
-      localStorage.setItem('resonate_sync_delay', delay.toString());
+      localStorage.setItem('sendspin_sync_delay', delay.toString());
       return delay;
     }
 

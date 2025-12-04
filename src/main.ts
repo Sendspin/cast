@@ -1,4 +1,4 @@
-import { ResonatePlayer } from "@music-assistant/resonate-js";
+import { SendspinPlayer } from "@music-assistant/sendspin-js";
 
 declare global {
   interface Window {
@@ -8,7 +8,7 @@ declare global {
   }
 }
 
-const CAST_NAMESPACE = "urn:x-cast:resonate";
+const CAST_NAMESPACE = "urn:x-cast:sendspin";
 
 // Cast context for sending messages back to sender
 let castContext: any = null;
@@ -33,7 +33,7 @@ function setHardwareVolume(volume: number, muted: boolean): void {
     // Cast API uses 0.0-1.0 for volume level
     castContext.setSystemVolumeLevel(volume / 100);
     castContext.setSystemVolumeMuted(muted);
-    console.log("Resonate: Set hardware volume:", volume, "muted:", muted);
+    console.log("Sendspin: Set hardware volume:", volume, "muted:", muted);
   }
 }
 
@@ -60,31 +60,31 @@ let providedSyncDelay: number = 0;
 function getPlayerId(): string {
   // If a player ID was provided by the sender, use it
   if (providedPlayerId) {
-    localStorage.setItem("resonate_player_id", providedPlayerId);
+    localStorage.setItem("sendspin_player_id", providedPlayerId);
     return providedPlayerId;
   }
 
   const params = new URLSearchParams(window.location.search);
   const paramId = params.get("player_id");
   if (paramId) {
-    localStorage.setItem("resonate_player_id", paramId);
+    localStorage.setItem("sendspin_player_id", paramId);
     return paramId;
   }
 
   // Check localStorage for existing ID
-  const storedId = localStorage.getItem("resonate_player_id");
+  const storedId = localStorage.getItem("sendspin_player_id");
   if (storedId) {
     return storedId;
   }
 
   // Generate and store a new ID
   const newId = `cast-${Math.random().toString(36).substring(2, 10)}`;
-  localStorage.setItem("resonate_player_id", newId);
+  localStorage.setItem("sendspin_player_id", newId);
   return newId;
 }
 
 // Update debug info
-function updateDebug(player: ResonatePlayer) {
+function updateDebug(player: SendspinPlayer) {
   const sync = player.timeSyncInfo;
   const info = player.syncInfo;
   const format = player.currentFormat;
@@ -111,20 +111,20 @@ let currentPlayerState: {
   isPlaying: boolean;
 } = { isPlaying: false };
 
-// Connect to Resonate server
+// Connect to Sendspin server
 async function connectToServer(baseUrl: string) {
   const playerId = getPlayerId();
 
-  console.log("Resonate: Connecting to", baseUrl, "as", playerId);
+  console.log("Sendspin: Connecting to", baseUrl, "as", playerId);
   window.setStatus?.("Connecting...");
   sendStatusToSender({ state: "connecting", message: "Connecting to server..." });
 
   // Use provided name or default
   const clientName = providedPlayerName || "Music Assistant Cast Receiver";
 
-  console.log("Resonate: Using sync delay:", providedSyncDelay, "ms");
+  console.log("Sendspin: Using sync delay:", providedSyncDelay, "ms");
 
-  const player = new ResonatePlayer({
+  const player = new SendspinPlayer({
     playerId,
     baseUrl,
     // Cast receiver config
@@ -160,7 +160,7 @@ async function connectToServer(baseUrl: string) {
 
   try {
     await player.connect();
-    console.log("Resonate: Connected - waiting for stream...");
+    console.log("Sendspin: Connected - waiting for stream...");
     window.setStatus?.("Connected · Waiting for stream");
     sendStatusToSender({ state: "connected", message: "Waiting for stream..." });
 
@@ -170,7 +170,7 @@ async function connectToServer(baseUrl: string) {
       sendPlayerStatus(player);
     }, 1000);
   } catch (error) {
-    console.error("Resonate: Connection failed:", error);
+    console.error("Sendspin: Connection failed:", error);
     window.setStatus?.("Connection failed");
     sendStatusToSender({ state: "error", message: "Connection failed" });
   }
@@ -180,7 +180,7 @@ async function connectToServer(baseUrl: string) {
 }
 
 // Send current player status to sender
-function sendPlayerStatus(player: ResonatePlayer) {
+function sendPlayerStatus(player: SendspinPlayer) {
   const sync = player.timeSyncInfo;
   const info = player.syncInfo;
   const hwVol = getHardwareVolume();
@@ -202,7 +202,7 @@ function isRunningOnChromecast(): boolean {
 function initCastReceiver() {
   // Redirect to sender page if not running on a Cast device
   if (!isRunningOnChromecast()) {
-    console.log("Resonate: Not running on Cast device, redirecting to sender...");
+    console.log("Sendspin: Not running on Cast device, redirecting to sender...");
     window.location.href = "./sender.html";
     return;
   }
@@ -211,7 +211,7 @@ function initCastReceiver() {
   const context = castFramework?.CastReceiverContext?.getInstance();
 
   if (!context) {
-    console.log("Resonate: Cast SDK not available");
+    console.log("Sendspin: Cast SDK not available");
     window.setStatus?.("Cast SDK error");
     return;
   }
@@ -219,12 +219,12 @@ function initCastReceiver() {
   // Store context for sending messages back to sender
   castContext = context;
 
-  console.log("Resonate: Initializing Cast Receiver...");
+  console.log("Sendspin: Initializing Cast Receiver...");
   window.setStatus?.("Waiting for sender...");
 
   // Listen for system (hardware) volume changes
   context.addEventListener(castFramework.system.EventType.SYSTEM_VOLUME_CHANGED, (event: any) => {
-    console.log("Resonate: System volume changed:", event.data);
+    console.log("Sendspin: System volume changed:", event.data);
     const hwVol = getHardwareVolume();
     window.setStatus?.(
       currentPlayerState.isPlaying
@@ -232,7 +232,7 @@ function initCastReceiver() {
         : "Stopped",
     );
     // Send volume update to sender
-    const player = (window as any).player as ResonatePlayer | undefined;
+    const player = (window as any).player as SendspinPlayer | undefined;
     if (player) {
       sendPlayerStatus(player);
     } else {
@@ -247,25 +247,25 @@ function initCastReceiver() {
 
   // Cast event listeners
   context.addEventListener(castFramework.system.EventType.READY, () => {
-    console.log("Resonate: Cast receiver READY");
+    console.log("Sendspin: Cast receiver READY");
   });
 
   context.addEventListener(castFramework.system.EventType.SENDER_CONNECTED, () => {
-    console.log("Resonate: Sender connected");
+    console.log("Sendspin: Sender connected");
   });
 
   context.addEventListener(castFramework.system.EventType.SENDER_DISCONNECTED, () => {
-    console.log("Resonate: Sender disconnected");
+    console.log("Sendspin: Sender disconnected");
     window.setStatus?.("Disconnected");
   });
 
   context.addEventListener(castFramework.system.EventType.ERROR, (event: any) => {
-    console.error("Resonate: Cast error:", event);
+    console.error("Sendspin: Cast error:", event);
   });
 
   // Listen for custom messages with server URL, player ID, name, and sync delay
   context.addCustomMessageListener(CAST_NAMESPACE, (event: any) => {
-    console.log("Resonate: Received message from sender:", event.data);
+    console.log("Sendspin: Received message from sender:", event.data);
     const serverUrl = event.data?.serverUrl;
     const playerId = event.data?.playerId;
     const playerName = event.data?.playerName;
@@ -273,22 +273,22 @@ function initCastReceiver() {
     if (playerId) {
       // Store the player ID provided by Music Assistant
       providedPlayerId = playerId;
-      console.log("Resonate: Using player ID from sender:", playerId);
+      console.log("Sendspin: Using player ID from sender:", playerId);
     }
     if (playerName) {
       // Store the player name provided by Music Assistant
       providedPlayerName = playerName;
-      console.log("Resonate: Using player name from sender:", playerName);
+      console.log("Sendspin: Using player name from sender:", playerName);
     }
     if (typeof syncDelay === "number") {
       // Store the sync delay provided by Music Assistant
       providedSyncDelay = syncDelay;
-      console.log("Resonate: Using sync delay from sender:", syncDelay, "ms");
+      console.log("Sendspin: Using sync delay from sender:", syncDelay, "ms");
       // Update existing player if already connected
-      const existingPlayer = (window as any).player as ResonatePlayer | undefined;
+      const existingPlayer = (window as any).player as SendspinPlayer | undefined;
       if (existingPlayer) {
         existingPlayer.setSyncDelay(syncDelay);
-        console.log("Resonate: Updated sync delay on existing player");
+        console.log("Sendspin: Updated sync delay on existing player");
       }
     }
     if (serverUrl) {
@@ -302,7 +302,7 @@ function initCastReceiver() {
   options.maxInactivity = 3600; // 1 hour max inactivity
 
   context.start(options);
-  console.log("Resonate: Cast Receiver started");
+  console.log("Sendspin: Cast Receiver started");
 }
 
 // Start when DOM is ready

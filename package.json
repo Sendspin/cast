@@ -1,15 +1,15 @@
 {
-  "name": "resonate-over-cast",
+  "name": "sendspin-over-cast",
   "version": "0.1.0",
   "type": "module",
-  "description": "Chromecast receiver for Music Assistant using the Resonate protocol",
+  "description": "Chromecast receiver for Music Assistant using the Sendspin protocol",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@music-assistant/resonate-js": "^0.1.0"
+    "@music-assistant/sendspin-js": "^0.1.0"
   },
   "devDependencies": {
     "typescript": "5.9.3",
