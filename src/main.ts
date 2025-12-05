@@ -160,9 +160,9 @@ async function connectToServer(baseUrl: string) {
 
   try {
     await player.connect();
-    console.log("Sendspin: Connected - waiting for stream...");
-    window.setStatus?.("Connected · Waiting for stream");
-    sendStatusToSender({ state: "connected", message: "Waiting for stream..." });
+    console.log("Sendspin: Connected - ready to play");
+    window.setStatus?.("Ready to play");
+    sendStatusToSender({ state: "connected", message: "Ready to play" });
 
     // Periodically send status to sender
     setInterval(() => {
