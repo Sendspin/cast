@@ -51,10 +51,11 @@ function sendStatusToSender(status: {
   }
 }
 
-// Player ID, name, and sync delay provided by the sender (Music Assistant server)
+// Player ID, name, sync delay, and codecs provided by the sender (Music Assistant server)
 let providedPlayerId: string | null = null;
 let providedPlayerName: string | null = null;
 let providedSyncDelay: number = 0;
+let providedCodecs: string[] | null = null;
 
 // Generate or get player ID (persisted in localStorage)
 function getPlayerId(): string {
@@ -132,11 +133,8 @@ async function connectToServer(baseUrl: string) {
     clientName,
     syncDelay: providedSyncDelay,
     bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
-    supportedFormats: [
-      // PCM only for GC4A 2.0 compatibility (no decodeAudioData for FLAC/Opus)
-      { codec: "pcm", sample_rate: 48000, channels: 2, bit_depth: 16 },
-      { codec: "pcm", sample_rate: 44100, channels: 2, bit_depth: 16 },
-    ],
+    // Use codecs from sender config, default to PCM for maximum compatibility
+    codecs: providedCodecs ?? ["pcm"],
     // Use hardware volume control (Cast system volume)
     useHardwareVolume: true,
     onVolumeCommand: setHardwareVolume,
@@ -271,6 +269,11 @@ function initCastReceiver() {
     const playerId = event.data?.playerId;
     const playerName = event.data?.playerName;
     const syncDelay = event.data?.syncDelay;
+    const codecs = event.data?.codecs;
+    if (Array.isArray(codecs) && codecs.every((c) => ["pcm", "flac", "opus"].includes(c))) {
+      providedCodecs = codecs;
+      console.log("Sendspin: Using codecs from sender:", codecs);
+    }
     if (playerId) {
       // Store the player ID provided by Music Assistant
       providedPlayerId = playerId;

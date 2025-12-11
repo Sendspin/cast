@@ -190,6 +190,16 @@
       <small>Positive delays playback, negative advances it. Adjust to sync with other speakers.</small>
     </div>
 
+    <div class="server-config" style="margin-top: 16px;">
+      <label for="codec">Audio Codec</label>
+      <select id="codec" style="padding: 10px 12px; font-size: 14px; border: 1px solid #ddd; border-radius: 8px;">
+        <option value="flac">FLAC</option>
+        <option value="opus">Opus</option>
+        <option value="pcm">PCM (uncompressed)</option>
+      </select>
+      <small>FLAC offers good compression with lossless quality. Opus provides better compression but may have compatibility issues on some Cast devices. PCM is uncompressed and uses more bandwidth.</small>
+    </div>
+
     <div class="buttons">
       <button id="castBtn" onclick="startCasting()" disabled>Cast to Device</button>
       <button id="stopBtn" onclick="stopCasting()" disabled>Stop Casting</button>
@@ -213,6 +223,10 @@
     if (savedSyncDelay) {
       document.getElementById('syncDelay').value = savedSyncDelay;
     }
+    const savedCodec = localStorage.getItem('sendspin_codec');
+    if (savedCodec) {
+      document.getElementById('codec').value = savedCodec;
+    }
 
     function getServerUrl() {
       const ip = document.getElementById('serverIp').value.trim();
@@ -225,6 +239,12 @@
       const delay = parseInt(document.getElementById('syncDelay').value, 10) || 0;
       localStorage.setItem('sendspin_sync_delay', delay.toString());
       return delay;
+    }
+
+    function getCodecs() {
+      const codec = document.getElementById('codec').value;
+      localStorage.setItem('sendspin_codec', codec);
+      return [codec];
     }
 
     function setStatus(text) {
@@ -323,9 +343,10 @@
               // Send server URL and config to receiver
               const serverUrl = getServerUrl();
               const syncDelay = getSyncDelay();
+              const codecs = getCodecs();
               if (serverUrl) {
                 updateStatus({ state: 'connecting', message: 'Starting receiver...' });
-                castSession.sendMessage(CAST_NAMESPACE, { serverUrl, syncDelay })
+                castSession.sendMessage(CAST_NAMESPACE, { serverUrl, syncDelay, codecs })
                   .catch((err) => {
                     updateStatus({ state: 'error', message: 'Failed to send config: ' + err });
                   });
