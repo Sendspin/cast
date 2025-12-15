@@ -13,6 +13,9 @@ const CAST_NAMESPACE = "urn:x-cast:sendspin";
 // Cast context for sending messages back to sender
 let castContext: any = null;
 
+// Volume stored before muting (for restore on unmute)
+let volumeBeforeMute: number | null = null;
+
 // Get hardware volume from Cast system (0-100 scale)
 function getHardwareVolume(): { volume: number; muted: boolean } {
   if (castContext) {
@@ -29,11 +32,35 @@ function getHardwareVolume(): { volume: number; muted: boolean } {
 
 // Set hardware volume via Cast system
 function setHardwareVolume(volume: number, muted: boolean): void {
-  if (castContext) {
-    // Cast API uses 0.0-1.0 for volume level
+  if (!castContext) return;
+
+  const currentVol = getHardwareVolume();
+
+  if (muted && !currentVol.muted) {
+    // Muting: store current volume for restore, then apply requested volume
+    volumeBeforeMute = currentVol.volume;
+    if (volume !== currentVol.volume) {
+      castContext.setSystemVolumeLevel(volume / 100);
+    }
+    castContext.setSystemVolumeMuted(true);
+    console.log("Sendspin: Muted, stored volume:", volumeBeforeMute);
+  } else if (!muted && currentVol.muted) {
+    // Unmuting: unmute first, then restore previous volume
+    const restoreVolume = volumeBeforeMute ?? currentVol.volume;
+    castContext.setSystemVolumeMuted(false);
+    castContext.setSystemVolumeLevel(restoreVolume / 100);
+    console.log("Sendspin: Unmuted, restored volume:", restoreVolume);
+    volumeBeforeMute = null;
+  } else {
+    // Volume change (not mute toggle): update level directly
     castContext.setSystemVolumeLevel(volume / 100);
-    castContext.setSystemVolumeMuted(muted);
-    console.log("Sendspin: Set hardware volume:", volume, "muted:", muted);
+    // If changing volume while muted, update stored volume too
+    if (currentVol.muted) {
+      volumeBeforeMute = volume;
+      console.log("Sendspin: Volume changed while muted, updated restore volume:", volume);
+    } else {
+      console.log("Sendspin: Set hardware volume:", volume);
+    }
   }
 }
 
@@ -225,6 +252,13 @@ function initCastReceiver() {
   context.addEventListener(castFramework.system.EventType.SYSTEM_VOLUME_CHANGED, (event: any) => {
     console.log("Sendspin: System volume changed:", event.data);
     const hwVol = getHardwareVolume();
+
+    // Clear stored volume if user unmuted externally (via remote/Google Home)
+    if (!hwVol.muted && volumeBeforeMute !== null) {
+      console.log("Sendspin: User unmuted externally, clearing stored volume");
+      volumeBeforeMute = null;
+    }
+
     window.setStatus?.(
       currentPlayerState.isPlaying
         ? `Playing · Volume: ${hwVol.volume}%${hwVol.muted ? " (muted)" : ""}`
