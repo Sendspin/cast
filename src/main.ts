@@ -57,6 +57,10 @@ let providedPlayerName: string | null = null;
 let providedSyncDelay: number = 0;
 let providedCodecs: string[] | null = null;
 
+// Track current connection settings (for detecting changes that require reconnect)
+let currentServerUrl: string | null = null;
+let currentPlayerCodecs: string[] | null = null;
+
 // Generate or get player ID (persisted in localStorage)
 function getPlayerId(): string {
   // If a player ID was provided by the sender, use it
@@ -114,6 +118,13 @@ let currentPlayerState: {
 
 // Connect to Sendspin server
 async function connectToServer(baseUrl: string) {
+  // Cleanup existing player before creating new one
+  const existingPlayer = (window as any).player as SendspinPlayer | undefined;
+  if (existingPlayer) {
+    console.log("Sendspin: Disconnecting existing player before reconnect");
+    existingPlayer.disconnect();
+  }
+
   const playerId = getPlayerId();
 
   console.log("Sendspin: Connecting to", baseUrl, "as", playerId);
@@ -176,6 +187,10 @@ async function connectToServer(baseUrl: string) {
 
   // Expose player globally for debugging
   (window as any).player = player;
+
+  // Track current connection settings for change detection
+  currentServerUrl = baseUrl;
+  currentPlayerCodecs = providedCodecs ?? ["pcm"];
 }
 
 // Send current player status to sender
@@ -295,6 +310,17 @@ function initCastReceiver() {
         console.log("Sendspin: Updated sync delay on existing player");
       }
     }
+    // Check if codecs changed on an existing player - requires reconnect
+    const existingPlayer = (window as any).player as SendspinPlayer | undefined;
+    if (existingPlayer && currentPlayerCodecs && providedCodecs) {
+      const codecsChanged = JSON.stringify(providedCodecs) !== JSON.stringify(currentPlayerCodecs);
+      if (codecsChanged) {
+        console.log("Sendspin: Codecs changed, reconnecting...");
+        connectToServer(serverUrl ?? currentServerUrl!);
+        return;
+      }
+    }
+
     if (serverUrl) {
       connectToServer(serverUrl);
     }

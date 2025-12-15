@@ -187,7 +187,7 @@
     <div class="server-config" style="margin-top: 16px;">
       <label for="syncDelay">Sync Delay (ms)</label>
       <input type="number" id="syncDelay" placeholder="0" value="0" style="width: 100px;">
-      <small>Positive delays playback, negative advances it. Adjust to sync with other speakers.</small>
+      <small>Positive delays playback, negative advances it. Changes apply instantly.</small>
     </div>
 
     <div class="server-config" style="margin-top: 16px;">
@@ -388,6 +388,15 @@
         castSession.endSession(true);
       }
     }
+
+    // Live update sync delay when changed during active session
+    document.getElementById('syncDelay').addEventListener('input', () => {
+      if (!castSession) return;
+      const syncDelay = getSyncDelay();
+      castSession.sendMessage(CAST_NAMESPACE, { syncDelay })
+        .then(() => console.log('Sent sync delay update:', syncDelay))
+        .catch((err) => console.error('Failed to send sync delay:', err));
+    });
   </script>
 </body>
 </html>
