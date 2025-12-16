@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@music-assistant/sendspin-js": "0.4.3"
+    "@music-assistant/sendspin-js": "0.4.4"
   },
   "devDependencies": {
     "typescript": "5.9.3",
