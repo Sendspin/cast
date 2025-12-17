@@ -322,8 +322,11 @@ function initCastReceiver() {
     if (existingPlayer && currentPlayerCodecs && providedCodecs) {
       const codecsChanged = JSON.stringify(providedCodecs) !== JSON.stringify(currentPlayerCodecs);
       if (codecsChanged) {
-        console.log("Sendspin: Codecs changed, reconnecting...");
-        connectToServer(serverUrl ?? currentServerUrl!);
+        const targetUrl = serverUrl ?? currentServerUrl;
+        if (targetUrl) {
+          console.log("Sendspin: Codecs changed, reconnecting...");
+          connectToServer(targetUrl);
+        }
         return;
       }
     }
