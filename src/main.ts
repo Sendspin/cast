@@ -61,6 +61,9 @@ let providedCodecs: string[] | null = null;
 let currentServerUrl: string | null = null;
 let currentPlayerCodecs: string[] | null = null;
 
+// Track status update interval (cleared on reconnect to prevent memory leak)
+let statusIntervalId: ReturnType<typeof setInterval> | null = null;
+
 // Generate or get player ID (persisted in localStorage)
 function getPlayerId(): string {
   // If a player ID was provided by the sender, use it
@@ -118,7 +121,11 @@ let currentPlayerState: {
 
 // Connect to Sendspin server
 async function connectToServer(baseUrl: string) {
-  // Cleanup existing player before creating new one
+  // Cleanup existing player and interval before creating new one
+  if (statusIntervalId !== null) {
+    clearInterval(statusIntervalId);
+    statusIntervalId = null;
+  }
   const existingPlayer = (window as any).player as SendspinPlayer | undefined;
   if (existingPlayer) {
     console.log("Sendspin: Disconnecting existing player before reconnect");
@@ -175,7 +182,7 @@ async function connectToServer(baseUrl: string) {
     sendStatusToSender({ state: "connected", message: "Ready to play" });
 
     // Periodically send status to sender
-    setInterval(() => {
+    statusIntervalId = setInterval(() => {
       updateDebug(player);
       sendPlayerStatus(player);
     }, 1000);
