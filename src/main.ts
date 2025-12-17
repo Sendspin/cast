@@ -331,7 +331,7 @@ function initCastReceiver() {
       }
     }
 
-    if (serverUrl) {
+    if (serverUrl && serverUrl !== currentServerUrl) {
       connectToServer(serverUrl);
     }
   });
