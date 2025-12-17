@@ -181,6 +181,13 @@ async function connectToServer(baseUrl: string) {
     window.setStatus?.("Ready to play");
     sendStatusToSender({ state: "connected", message: "Ready to play" });
 
+    // Track current connection settings for change detection (only on success)
+    currentServerUrl = baseUrl;
+    currentPlayerCodecs = providedCodecs ?? ["pcm"];
+
+    // Expose player globally for debugging
+    (window as any).player = player;
+
     // Periodically send status to sender
     statusIntervalId = setInterval(() => {
       updateDebug(player);
@@ -191,13 +198,6 @@ async function connectToServer(baseUrl: string) {
     window.setStatus?.("Connection failed");
     sendStatusToSender({ state: "error", message: "Connection failed" });
   }
-
-  // Expose player globally for debugging
-  (window as any).player = player;
-
-  // Track current connection settings for change detection
-  currentServerUrl = baseUrl;
-  currentPlayerCodecs = providedCodecs ?? ["pcm"];
 }
 
 // Send current player status to sender
