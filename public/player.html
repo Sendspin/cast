@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sendspin Player</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 40px 20px;
+      max-width: 600px;
+      margin: 0 auto;
+      background: #1a1a2e;
+      color: #eee;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    h1 {
+      margin: 0 0 10px 0;
+      font-size: 28px;
+      font-weight: 600;
+      color: #fff;
+    }
+    .description {
+      color: #aaa;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    .card {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .config-group {
+      margin-bottom: 20px;
+    }
+    .config-group:last-child {
+      margin-bottom: 0;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      color: #ddd;
+    }
+    input, select {
+      padding: 12px 14px;
+      font-size: 16px;
+      width: 100%;
+      border: 1px solid #3a4a6b;
+      border-radius: 8px;
+      background: #0f0f23;
+      color: #fff;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #4285f4;
+    }
+    input::placeholder {
+      color: #666;
+    }
+    small {
+      color: #888;
+      display: block;
+      margin-top: 8px;
+      font-size: 12px;
+    }
+    .inline-group {
+      display: flex;
+      gap: 16px;
+    }
+    .inline-group .config-group {
+      flex: 1;
+    }
+    .buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    #connectBtn {
+      background: #4285f4;
+      color: white;
+      flex: 1;
+    }
+    #connectBtn:hover:not(:disabled) {
+      background: #3367d6;
+    }
+    #connectBtn.connected {
+      background: #ea4335;
+    }
+    #connectBtn.connected:hover:not(:disabled) {
+      background: #c5221f;
+    }
+    #copyUrlBtn {
+      background: #34a853;
+      color: white;
+    }
+    #copyUrlBtn:hover:not(:disabled) {
+      background: #2d8e47;
+    }
+    #copyUrlBtn.copied {
+      background: #5f6368;
+    }
+    .status-card {
+      background: #0f0f23;
+      border: 1px solid #3a4a6b;
+    }
+    .status-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #5f6368;
+    }
+    .status-dot.connecting { background: #fbbc04; }
+    .status-dot.connected { background: #34a853; }
+    .status-dot.playing { background: #34a853; animation: pulse 1.5s infinite; }
+    .status-dot.stopped { background: #5f6368; }
+    .status-dot.error { background: #ea4335; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .status-label {
+      font-weight: 600;
+      font-size: 16px;
+    }
+    .status-message {
+      color: #aaa;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .status-item {
+      background: #16213e;
+      padding: 12px;
+      border-radius: 8px;
+    }
+    .status-item-label {
+      font-size: 11px;
+      color: #888;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .status-item-value {
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .sync-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .sync-badge.synced { background: #1e4620; color: #81c784; }
+    .sync-badge.syncing { background: #4a3f00; color: #ffd54f; }
+    .tip {
+      background: rgba(66, 133, 244, 0.1);
+      border: 1px solid rgba(66, 133, 244, 0.3);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #8ab4f8;
+    }
+    .format-info {
+      grid-column: span 2;
+    }
+    a {
+      color: #8ab4f8;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sendspin Player</h1>
+  <p class="description">
+    A browser-based audio player using the Sendspin protocol. Connect to a Music Assistant
+    server and receive synchronized audio streams directly in your browser.
+  </p>
+
+  <div class="tip">
+    <strong>Tip:</strong> Use the "Copy URL" button to get a shareable link with your server
+    pre-configured. Anyone opening that link just needs to click Connect.
+    Have a Chromecast? Try the <a href="sender.html">Cast Sender</a> instead.
+  </div>
+
+  <div class="card">
+    <div class="config-group">
+      <label for="serverUrl">Server URL</label>
+      <input type="text" id="serverUrl" placeholder="ws://192.168.1.100:8927/sendspin">
+      <small>WebSocket endpoint of the Sendspin server</small>
+    </div>
+
+    <div class="inline-group">
+      <div class="config-group">
+        <label for="syncDelay">Sync Delay (ms)</label>
+        <input type="number" id="syncDelay" value="0">
+      </div>
+      <div class="config-group">
+        <label for="codec">Codec</label>
+        <select id="codec">
+          <option value="flac">FLAC</option>
+          <option value="opus">Opus</option>
+          <option value="pcm">PCM</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="config-group">
+      <label for="playerName">Player Name</label>
+      <input type="text" id="playerName" placeholder="Browser Player">
+      <small>Display name shown in Music Assistant</small>
+    </div>
+
+    <div class="buttons">
+      <button id="connectBtn" onclick="toggleConnection()">Connect</button>
+      <button id="copyUrlBtn" onclick="copyUrl()">Copy URL</button>
+    </div>
+  </div>
+
+  <div class="card status-card" id="statusCard" style="display: none;">
+    <div class="status-header">
+      <span class="status-dot" id="statusDot"></span>
+      <span class="status-label" id="statusLabel">Disconnected</span>
+    </div>
+    <div class="status-message" id="statusMessage"></div>
+    <div class="status-grid">
+      <div class="status-item">
+        <div class="status-item-label">Sync Status</div>
+        <div class="status-item-value" id="syncStatus">-</div>
+      </div>
+      <div class="status-item">
+        <div class="status-item-label">Time Offset</div>
+        <div class="status-item-value" id="timeOffset">-</div>
+      </div>
+      <div class="status-item">
+        <div class="status-item-label">Clock Drift</div>
+        <div class="status-item-value" id="clockDrift">-</div>
+      </div>
+      <div class="status-item">
+        <div class="status-item-label">Resyncs</div>
+        <div class="status-item-value" id="resyncCount">-</div>
+      </div>
+      <div class="status-item format-info">
+        <div class="status-item-label">Audio Format</div>
+        <div class="status-item-value" id="audioFormat">-</div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { SendspinPlayer } from 'https://esm.sh/@music-assistant/sendspin-js@0.4.4';
+
+    let player = null;
+    let statusInterval = null;
+    let isConnected = false;
+
+    // DOM elements
+    const serverUrlInput = document.getElementById('serverUrl');
+    const syncDelayInput = document.getElementById('syncDelay');
+    const codecSelect = document.getElementById('codec');
+    const playerNameInput = document.getElementById('playerName');
+    const connectBtn = document.getElementById('connectBtn');
+    const copyUrlBtn = document.getElementById('copyUrlBtn');
+    const statusCard = document.getElementById('statusCard');
+    const statusDot = document.getElementById('statusDot');
+    const statusLabel = document.getElementById('statusLabel');
+    const statusMessage = document.getElementById('statusMessage');
+
+    // Generate or retrieve player ID
+    function getPlayerId() {
+      let id = localStorage.getItem('sendspin_player_id');
+      if (!id) {
+        id = 'browser-' + Math.random().toString(36).substring(2, 10);
+        localStorage.setItem('sendspin_player_id', id);
+      }
+      return id;
+    }
+
+    // Parse URL parameters
+    function loadFromUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+
+      if (params.has('server')) {
+        serverUrlInput.value = params.get('server');
+      }
+      if (params.has('delay')) {
+        syncDelayInput.value = params.get('delay');
+      }
+      if (params.has('codec')) {
+        const codec = params.get('codec');
+        if (['flac', 'opus', 'pcm'].includes(codec)) {
+          codecSelect.value = codec;
+        }
+      }
+      if (params.has('name')) {
+        playerNameInput.value = params.get('name');
+      }
+    }
+
+    // Load from localStorage if no URL params
+    function loadFromLocalStorage() {
+      const params = new URLSearchParams(window.location.search);
+
+      if (!params.has('server')) {
+        const saved = localStorage.getItem('sendspin_server_url');
+        if (saved) serverUrlInput.value = saved;
+      }
+      if (!params.has('delay')) {
+        const saved = localStorage.getItem('sendspin_sync_delay');
+        if (saved) syncDelayInput.value = saved;
+      }
+      if (!params.has('codec')) {
+        const saved = localStorage.getItem('sendspin_codec');
+        if (saved && ['flac', 'opus', 'pcm'].includes(saved)) {
+          codecSelect.value = saved;
+        }
+      }
+      if (!params.has('name')) {
+        const saved = localStorage.getItem('sendspin_player_name');
+        if (saved) playerNameInput.value = saved;
+      }
+    }
+
+    // Save current config to localStorage
+    function saveToLocalStorage() {
+      localStorage.setItem('sendspin_server_url', serverUrlInput.value);
+      localStorage.setItem('sendspin_sync_delay', syncDelayInput.value);
+      localStorage.setItem('sendspin_codec', codecSelect.value);
+      localStorage.setItem('sendspin_player_name', playerNameInput.value);
+    }
+
+    // Build shareable URL with current config
+    function buildShareableUrl() {
+      const url = new URL(window.location.href.split('?')[0]);
+
+      if (serverUrlInput.value) {
+        url.searchParams.set('server', serverUrlInput.value);
+      }
+      if (syncDelayInput.value && syncDelayInput.value !== '0') {
+        url.searchParams.set('delay', syncDelayInput.value);
+      }
+      if (codecSelect.value !== 'flac') {
+        url.searchParams.set('codec', codecSelect.value);
+      }
+      if (playerNameInput.value) {
+        url.searchParams.set('name', playerNameInput.value);
+      }
+
+      return url.toString();
+    }
+
+    // Copy URL to clipboard
+    window.copyUrl = async function() {
+      const url = buildShareableUrl();
+
+      try {
+        await navigator.clipboard.writeText(url);
+        copyUrlBtn.textContent = 'Copied!';
+        copyUrlBtn.classList.add('copied');
+        setTimeout(() => {
+          copyUrlBtn.textContent = 'Copy URL';
+          copyUrlBtn.classList.remove('copied');
+        }, 2000);
+      } catch (err) {
+        // Fallback for older browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        copyUrlBtn.textContent = 'Copied!';
+        copyUrlBtn.classList.add('copied');
+        setTimeout(() => {
+          copyUrlBtn.textContent = 'Copy URL';
+          copyUrlBtn.classList.remove('copied');
+        }, 2000);
+      }
+    };
+
+    // Update status display
+    function updateStatus(state, message = '') {
+      statusCard.style.display = 'block';
+      statusDot.className = 'status-dot ' + state;
+
+      const labels = {
+        connecting: 'Connecting...',
+        connected: 'Connected',
+        playing: 'Playing',
+        stopped: 'Stopped',
+        error: 'Error',
+        disconnected: 'Disconnected'
+      };
+
+      statusLabel.textContent = labels[state] || state;
+      statusMessage.textContent = message;
+    }
+
+    // Update sync info display
+    function updateSyncInfo() {
+      if (!player) return;
+
+      const timeSyncInfo = player.timeSyncInfo;
+      const syncInfo = player.syncInfo;
+      const format = player.currentFormat;
+
+      // Sync status badge
+      const syncStatusEl = document.getElementById('syncStatus');
+      if (timeSyncInfo?.synced) {
+        syncStatusEl.innerHTML = '<span class="sync-badge synced">Synced</span>';
+      } else {
+        syncStatusEl.innerHTML = '<span class="sync-badge syncing">Syncing...</span>';
+      }
+
+      // Time offset
+      const timeOffsetEl = document.getElementById('timeOffset');
+      if (timeSyncInfo?.synced) {
+        const offset = timeSyncInfo.offset || 0;
+        const error = timeSyncInfo.error || 0;
+        timeOffsetEl.textContent = `${offset > 0 ? '+' : ''}${offset}ms ±${error}ms`;
+      } else {
+        timeOffsetEl.textContent = '-';
+      }
+
+      // Clock drift
+      const clockDriftEl = document.getElementById('clockDrift');
+      if (syncInfo?.clockDriftPercent !== undefined) {
+        const drift = syncInfo.clockDriftPercent;
+        clockDriftEl.textContent = `${drift >= 0 ? '+' : ''}${drift.toFixed(3)}%`;
+      } else {
+        clockDriftEl.textContent = '-';
+      }
+
+      // Resync count
+      const resyncCountEl = document.getElementById('resyncCount');
+      if (syncInfo?.resyncCount !== undefined) {
+        resyncCountEl.textContent = syncInfo.resyncCount.toString();
+      } else {
+        resyncCountEl.textContent = '-';
+      }
+
+      // Audio format
+      const audioFormatEl = document.getElementById('audioFormat');
+      if (format) {
+        audioFormatEl.textContent = `${format.codec?.toUpperCase() || '-'} ${format.sample_rate ? (format.sample_rate / 1000) + 'kHz' : ''} ${format.bit_depth ? format.bit_depth + 'bit' : ''}`;
+      } else {
+        audioFormatEl.textContent = '-';
+      }
+    }
+
+    // Convert server URL to base URL format expected by SDK
+    function getBaseUrl(serverUrl) {
+      // Handle various input formats
+      let url = serverUrl.trim();
+
+      // If it's just an IP/hostname, add default port
+      if (!url.includes('://') && !url.includes(':')) {
+        url = 'http://' + url + ':8927';
+      } else if (!url.includes('://')) {
+        url = 'http://' + url;
+      }
+
+      // Convert ws:// to http:// for base URL (SDK handles WS internally)
+      url = url.replace('ws://', 'http://').replace('wss://', 'https://');
+
+      // Remove /sendspin path if present
+      url = url.replace(/\/sendspin\/?$/, '');
+
+      return url;
+    }
+
+    // Connect to server
+    async function connect() {
+      const serverUrl = serverUrlInput.value.trim();
+
+      if (!serverUrl) {
+        updateStatus('error', 'Please enter a server URL');
+        return;
+      }
+
+      saveToLocalStorage();
+
+      const baseUrl = getBaseUrl(serverUrl);
+      const syncDelay = parseInt(syncDelayInput.value, 10) || 0;
+      const codec = codecSelect.value;
+      const playerName = playerNameInput.value.trim() || 'Browser Player';
+      const playerId = getPlayerId();
+
+      updateStatus('connecting', `Connecting to ${baseUrl}...`);
+
+      try {
+        player = new SendspinPlayer({
+          playerId: playerId,
+          baseUrl: baseUrl,
+          audioOutputMode: 'direct',
+          clientName: playerName,
+          syncDelay: syncDelay,
+          codecs: [codec],
+          useHardwareVolume: false,
+          useOutputLatencyCompensation: true,
+          onStateChange: (state) => {
+            if (state.isPlaying) {
+              updateStatus('playing', 'Receiving audio stream');
+            } else if (isConnected) {
+              updateStatus('stopped', 'Waiting for playback');
+            }
+          }
+        });
+
+        await player.connect();
+
+        isConnected = true;
+        connectBtn.textContent = 'Disconnect';
+        connectBtn.classList.add('connected');
+        updateStatus('connected', 'Connected, waiting for playback');
+
+        // Start status polling
+        statusInterval = setInterval(updateSyncInfo, 500);
+
+      } catch (err) {
+        console.error('Connection failed:', err);
+        updateStatus('error', `Failed to connect: ${err.message}`);
+        cleanup();
+      }
+    }
+
+    // Disconnect from server
+    function disconnect() {
+      cleanup();
+      updateStatus('disconnected', 'Disconnected from server');
+    }
+
+    // Cleanup player resources
+    function cleanup() {
+      if (statusInterval) {
+        clearInterval(statusInterval);
+        statusInterval = null;
+      }
+      if (player) {
+        try {
+          player.disconnect();
+        } catch (e) {
+          console.error('Error disconnecting:', e);
+        }
+        player = null;
+      }
+      isConnected = false;
+      connectBtn.textContent = 'Connect';
+      connectBtn.classList.remove('connected');
+    }
+
+    // Toggle connection state
+    window.toggleConnection = function() {
+      if (isConnected) {
+        disconnect();
+      } else {
+        connect();
+      }
+    };
+
+    // Live sync delay update
+    syncDelayInput.addEventListener('input', () => {
+      if (player && isConnected) {
+        const delay = parseInt(syncDelayInput.value, 10) || 0;
+        player.setSyncDelay(delay);
+        saveToLocalStorage();
+      }
+    });
+
+    // Initialize
+    loadFromUrlParams();
+    loadFromLocalStorage();
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', cleanup);
+  </script>
+</body>
+</html>
