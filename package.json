@@ -5,7 +5,7 @@
   "description": "Chromecast receiver for Music Assistant using the Sendspin protocol",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "rm -rf dist && vite build && cp dist/index.html dist/receiver.html",
     "preview": "vite preview"
   },
   "dependencies": {
