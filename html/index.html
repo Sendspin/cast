@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Sendspin over Cast Demo</title>
+  <title>Sendspin over Cast</title>
   <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
   <style>
     * { box-sizing: border-box; }
@@ -41,6 +41,10 @@
       margin-bottom: 24px;
       font-size: 13px;
       color: #1a56db;
+    }
+    .tip a {
+      color: inherit;
+      text-decoration: underline;
     }
     .card {
       background: white;
@@ -173,7 +177,7 @@
   </div>
 
   <div class="tip">
-    <strong>Tip:</strong> To cast to multiple speakers, open a separate tab for each one first,
+    <strong>Tip:</strong> To cast to multiple speakers, <a href="" target="_blank">open a new tab</a> for each one first,
     then start casting in each tab.
   </div>
 
@@ -214,8 +218,10 @@
     let castContext = null;
     let castSession = null;
 
-    // Load saved settings from localStorage
-    const savedIp = localStorage.getItem('sendspin_server_ip');
+    // Load saved settings from localStorage or URL query params
+    const urlParams = new URLSearchParams(window.location.search);
+    const hostFromUrl = urlParams.get('host');
+    const savedIp = hostFromUrl || localStorage.getItem('sendspin_server_ip');
     if (savedIp) {
       document.getElementById('serverIp').value = savedIp;
     }
