@@ -12,6 +12,8 @@ const CAST_NAMESPACE = "urn:x-cast:sendspin";
 const KNOWN_CODECS = ["pcm", "flac", "opus"] as const;
 type Codec = (typeof KNOWN_CODECS)[number];
 const DEFAULT_CODECS: Codec[] = ["pcm"];
+const MAX_INIT_RETRIES = 40;
+const RETRY_DELAY_MS = 250;
 
 function isCodec(value: unknown): value is Codec {
   return (
@@ -374,12 +376,12 @@ function initCastReceiverWithRetry(attempt = 0) {
   if (tryInitCastReceiver()) {
     return;
   }
-  if (attempt >= 40) {
+  if (attempt >= MAX_INIT_RETRIES) {
     console.log("Sendspin: Cast SDK not available");
     window.setStatus?.("Not running in a Cast receiver context");
     return;
   }
-  setTimeout(() => initCastReceiverWithRetry(attempt + 1), 250);
+  setTimeout(() => initCastReceiverWithRetry(attempt + 1), RETRY_DELAY_MS);
 }
 
 initCastReceiverWithRetry();
