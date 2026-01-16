@@ -9,6 +9,16 @@ declare global {
 }
 
 const CAST_NAMESPACE = "urn:x-cast:sendspin";
+const KNOWN_CODECS = ["pcm", "flac", "opus"] as const;
+type Codec = (typeof KNOWN_CODECS)[number];
+const DEFAULT_CODECS: Codec[] = ["pcm"];
+
+function isCodec(value: unknown): value is Codec {
+  return (
+    typeof value === "string" &&
+    (KNOWN_CODECS as readonly string[]).includes(value)
+  );
+}
 
 // Cast context for sending messages back to sender
 let castContext: any = null;
@@ -42,7 +52,11 @@ function sendStatusToSender(status: {
   state: "connecting" | "connected" | "playing" | "stopped" | "error";
   message?: string;
   sync?: { synced: boolean; offset?: number; error?: number };
-  syncInfo?: { clockDriftPercent: number; syncErrorMs: number; resyncCount: number };
+  syncInfo?: {
+    clockDriftPercent: number;
+    syncErrorMs: number;
+    resyncCount: number;
+  };
   volume?: number;
   muted?: boolean;
 }) {
@@ -55,11 +69,11 @@ function sendStatusToSender(status: {
 let providedPlayerId: string | null = null;
 let providedPlayerName: string | null = null;
 let providedSyncDelay: number = 0;
-let providedCodecs: string[] | null = null;
+let providedCodecs: Codec[] | null = null;
 
 // Track current connection settings (for detecting changes that require reconnect)
 let currentServerUrl: string | null = null;
-let currentPlayerCodecs: string[] | null = null;
+let currentPlayerCodecs: Codec[] | null = null;
 
 // Track status update interval (cleared on reconnect to prevent memory leak)
 let statusIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -136,7 +150,10 @@ async function connectToServer(baseUrl: string) {
 
   console.log("Sendspin: Connecting to", baseUrl, "as", playerId);
   window.setStatus?.("Connecting...");
-  sendStatusToSender({ state: "connecting", message: "Connecting to server..." });
+  sendStatusToSender({
+    state: "connecting",
+    message: "Connecting to server...",
+  });
 
   // Use provided name or default
   const clientName = providedPlayerName || "Music Assistant Cast Receiver";
@@ -151,7 +168,7 @@ async function connectToServer(baseUrl: string) {
     syncDelay: providedSyncDelay,
     bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
     // Use codecs from sender config, default to PCM for maximum compatibility
-    codecs: providedCodecs ?? ["pcm"],
+    codecs: providedCodecs ?? DEFAULT_CODECS,
     // Use hardware volume control (Cast system volume)
     useHardwareVolume: true,
     onVolumeCommand: setHardwareVolume,
@@ -182,7 +199,7 @@ async function connectToServer(baseUrl: string) {
 
     // Track current connection settings for change detection (only on success)
     currentServerUrl = baseUrl;
-    currentPlayerCodecs = providedCodecs ?? ["pcm"];
+    currentPlayerCodecs = providedCodecs ?? DEFAULT_CODECS;
 
     // Expose player globally for debugging
     (window as any).player = player;
@@ -235,45 +252,57 @@ function tryInitCastReceiver(): boolean {
   window.setStatus?.("Waiting for sender...");
 
   // Listen for system (hardware) volume changes
-  context.addEventListener(castFramework.system.EventType.SYSTEM_VOLUME_CHANGED, (event: any) => {
-    console.log("Sendspin: System volume changed:", event.data);
-    const hwVol = getHardwareVolume();
-    window.setStatus?.(
-      currentPlayerState.isPlaying
-        ? `Playing · Volume: ${hwVol.volume}%${hwVol.muted ? " (muted)" : ""}`
-        : "Stopped",
-    );
-    // Send volume update to sender
-    const player = (window as any).player as SendspinPlayer | undefined;
-    if (player) {
-      sendPlayerStatus(player);
-    } else {
-      // No player yet, send basic volume update
-      sendStatusToSender({
-        state: "connected",
-        volume: hwVol.volume,
-        muted: hwVol.muted,
-      });
-    }
-  });
+  context.addEventListener(
+    castFramework.system.EventType.SYSTEM_VOLUME_CHANGED,
+    (event: any) => {
+      console.log("Sendspin: System volume changed:", event.data);
+      const hwVol = getHardwareVolume();
+      window.setStatus?.(
+        currentPlayerState.isPlaying
+          ? `Playing · Volume: ${hwVol.volume}%${hwVol.muted ? " (muted)" : ""}`
+          : "Stopped",
+      );
+      // Send volume update to sender
+      const player = (window as any).player as SendspinPlayer | undefined;
+      if (player) {
+        sendPlayerStatus(player);
+      } else {
+        // No player yet, send basic volume update
+        sendStatusToSender({
+          state: "connected",
+          volume: hwVol.volume,
+          muted: hwVol.muted,
+        });
+      }
+    },
+  );
 
   // Cast event listeners
   context.addEventListener(castFramework.system.EventType.READY, () => {
     console.log("Sendspin: Cast receiver READY");
   });
 
-  context.addEventListener(castFramework.system.EventType.SENDER_CONNECTED, () => {
-    console.log("Sendspin: Sender connected");
-  });
+  context.addEventListener(
+    castFramework.system.EventType.SENDER_CONNECTED,
+    () => {
+      console.log("Sendspin: Sender connected");
+    },
+  );
 
-  context.addEventListener(castFramework.system.EventType.SENDER_DISCONNECTED, () => {
-    console.log("Sendspin: Sender disconnected");
-    window.setStatus?.("Disconnected");
-  });
+  context.addEventListener(
+    castFramework.system.EventType.SENDER_DISCONNECTED,
+    () => {
+      console.log("Sendspin: Sender disconnected");
+      window.setStatus?.("Disconnected");
+    },
+  );
 
-  context.addEventListener(castFramework.system.EventType.ERROR, (event: any) => {
-    console.error("Sendspin: Cast error:", event);
-  });
+  context.addEventListener(
+    castFramework.system.EventType.ERROR,
+    (event: any) => {
+      console.error("Sendspin: Cast error:", event);
+    },
+  );
 
   // Listen for custom messages with server URL, player ID, name, and sync delay
   context.addCustomMessageListener(CAST_NAMESPACE, (event: any) => {
@@ -283,7 +312,7 @@ function tryInitCastReceiver(): boolean {
     const playerName = event.data?.playerName;
     const syncDelay = event.data?.syncDelay;
     const codecs = event.data?.codecs;
-    if (Array.isArray(codecs) && codecs.every((c) => ["pcm", "flac", "opus"].includes(c))) {
+    if (Array.isArray(codecs) && codecs.every(isCodec)) {
       providedCodecs = codecs;
       console.log("Sendspin: Using codecs from sender:", codecs);
     }
@@ -302,7 +331,9 @@ function tryInitCastReceiver(): boolean {
       providedSyncDelay = syncDelay;
       console.log("Sendspin: Using sync delay from sender:", syncDelay, "ms");
       // Update existing player if already connected
-      const existingPlayer = (window as any).player as SendspinPlayer | undefined;
+      const existingPlayer = (window as any).player as
+        | SendspinPlayer
+        | undefined;
       if (existingPlayer) {
         existingPlayer.setSyncDelay(syncDelay);
         console.log("Sendspin: Updated sync delay on existing player");
@@ -311,7 +342,8 @@ function tryInitCastReceiver(): boolean {
     // Check if codecs changed on an existing player - requires reconnect
     const existingPlayer = (window as any).player as SendspinPlayer | undefined;
     if (existingPlayer && currentPlayerCodecs && providedCodecs) {
-      const codecsChanged = JSON.stringify(providedCodecs) !== JSON.stringify(currentPlayerCodecs);
+      const codecsChanged =
+        JSON.stringify(providedCodecs) !== JSON.stringify(currentPlayerCodecs);
       if (codecsChanged) {
         const targetUrl = serverUrl ?? currentServerUrl;
         if (targetUrl) {
