@@ -9,6 +9,13 @@ declare global {
 }
 
 const CAST_NAMESPACE = "urn:x-cast:sendspin";
+const KNOWN_CODECS = ["pcm", "flac", "opus"] as const;
+type Codec = (typeof KNOWN_CODECS)[number];
+const DEFAULT_CODECS: Codec[] = ["pcm"];
+
+function isCodec(value: unknown): value is Codec {
+  return typeof value === "string" && (KNOWN_CODECS as readonly string[]).includes(value);
+}
 
 // Cast context for sending messages back to sender
 let castContext: any = null;
@@ -55,11 +62,11 @@ function sendStatusToSender(status: {
 let providedPlayerId: string | null = null;
 let providedPlayerName: string | null = null;
 let providedSyncDelay: number = 0;
-let providedCodecs: string[] | null = null;
+let providedCodecs: Codec[] | null = null;
 
 // Track current connection settings (for detecting changes that require reconnect)
 let currentServerUrl: string | null = null;
-let currentPlayerCodecs: string[] | null = null;
+let currentPlayerCodecs: Codec[] | null = null;
 
 // Track status update interval (cleared on reconnect to prevent memory leak)
 let statusIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -152,7 +159,7 @@ async function connectToServer(baseUrl: string) {
     syncDelay: providedSyncDelay,
     bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
     // Use codecs from sender config, default to PCM for maximum compatibility
-    codecs: providedCodecs ?? ["pcm"],
+    codecs: providedCodecs ?? DEFAULT_CODECS,
     // Use hardware volume control (Cast system volume)
     useHardwareVolume: true,
     onVolumeCommand: setHardwareVolume,
@@ -183,7 +190,7 @@ async function connectToServer(baseUrl: string) {
 
     // Track current connection settings for change detection (only on success)
     currentServerUrl = baseUrl;
-    currentPlayerCodecs = providedCodecs ?? ["pcm"];
+    currentPlayerCodecs = providedCodecs ?? DEFAULT_CODECS;
 
     // Expose player globally for debugging
     (window as any).player = player;
@@ -292,7 +299,7 @@ function initCastReceiver() {
     const playerName = event.data?.playerName;
     const syncDelay = event.data?.syncDelay;
     const codecs = event.data?.codecs;
-    if (Array.isArray(codecs) && codecs.every((c) => ["pcm", "flac", "opus"].includes(c))) {
+    if (Array.isArray(codecs) && codecs.every(isCodec)) {
       providedCodecs = codecs;
       console.log("Sendspin: Using codecs from sender:", codecs);
     }
