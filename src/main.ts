@@ -9,6 +9,14 @@ declare global {
 }
 
 const CAST_NAMESPACE = "urn:x-cast:sendspin";
+
+// In-memory storage (avoids localStorage writes on Cast devices)
+const sessionStorage = new Map<string, string>();
+const memoryStorage = {
+  getItem: (key: string) => sessionStorage.get(key) ?? null,
+  setItem: (key: string, value: string) => sessionStorage.set(key, value),
+};
+
 const KNOWN_CODECS = ["pcm", "flac", "opus"] as const;
 type Codec = (typeof KNOWN_CODECS)[number];
 const DEFAULT_CODECS: Codec[] = ["pcm"];
@@ -167,6 +175,7 @@ async function connectToServer(baseUrl: string) {
     baseUrl,
     clientName,
     correctionMode: "sync", // Explicit sync mode for multi-device playback
+    storage: memoryStorage, // Cast doesn't support localStorage
     syncDelay: providedSyncDelay,
     bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
     // Use codecs from sender config, default to PCM for maximum compatibility
