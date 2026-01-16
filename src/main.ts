@@ -146,7 +146,6 @@ async function connectToServer(baseUrl: string) {
   const player = new SendspinPlayer({
     playerId,
     baseUrl,
-    // Cast receiver config
     audioOutputMode: "direct", // Output directly to audioContext.destination
     clientName,
     syncDelay: providedSyncDelay,
@@ -214,16 +213,20 @@ function sendPlayerStatus(player: SendspinPlayer) {
   });
 }
 
-// Initialize Cast Receiver
-function initCastReceiver() {
+let receiverStarted = false;
+
+// Try to initialize Cast Receiver (returns true on success)
+function tryInitCastReceiver(): boolean {
+  if (receiverStarted) {
+    return true;
+  }
+
   const castFramework = window.cast?.framework;
   const context = castFramework?.CastReceiverContext?.getInstance();
-
-  if (!context) {
-    console.log("Sendspin: Cast SDK not available");
-    window.setStatus?.("Not running in a Cast receiver context");
-    return;
+  if (!castFramework || !context) {
+    return false;
   }
+  receiverStarted = true;
 
   // Store context for sending messages back to sender
   castContext = context;
@@ -331,11 +334,20 @@ function initCastReceiver() {
 
   context.start(options);
   console.log("Sendspin: Cast Receiver started");
+
+  return true;
 }
 
-// Start when DOM is ready
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initCastReceiver);
-} else {
-  initCastReceiver();
+function initCastReceiverWithRetry(attempt = 0) {
+  if (tryInitCastReceiver()) {
+    return;
+  }
+  if (attempt >= 40) {
+    console.log("Sendspin: Cast SDK not available");
+    window.setStatus?.("Not running in a Cast receiver context");
+    return;
+  }
+  setTimeout(() => initCastReceiverWithRetry(attempt + 1), 250);
 }
+
+initCastReceiverWithRetry();
