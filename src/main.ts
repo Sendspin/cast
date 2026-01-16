@@ -14,7 +14,10 @@ type Codec = (typeof KNOWN_CODECS)[number];
 const DEFAULT_CODECS: Codec[] = ["pcm"];
 
 function isCodec(value: unknown): value is Codec {
-  return typeof value === "string" && (KNOWN_CODECS as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (KNOWN_CODECS as readonly string[]).includes(value)
+  );
 }
 
 // Cast context for sending messages back to sender
@@ -49,7 +52,11 @@ function sendStatusToSender(status: {
   state: "connecting" | "connected" | "playing" | "stopped" | "error";
   message?: string;
   sync?: { synced: boolean; offset?: number; error?: number };
-  syncInfo?: { clockDriftPercent: number; syncErrorMs: number; resyncCount: number };
+  syncInfo?: {
+    clockDriftPercent: number;
+    syncErrorMs: number;
+    resyncCount: number;
+  };
   volume?: number;
   muted?: boolean;
 }) {
@@ -143,7 +150,10 @@ async function connectToServer(baseUrl: string) {
 
   console.log("Sendspin: Connecting to", baseUrl, "as", playerId);
   window.setStatus?.("Connecting...");
-  sendStatusToSender({ state: "connecting", message: "Connecting to server..." });
+  sendStatusToSender({
+    state: "connecting",
+    message: "Connecting to server...",
+  });
 
   // Use provided name or default
   const clientName = providedPlayerName || "Music Assistant Cast Receiver";
@@ -230,7 +240,9 @@ function isRunningOnChromecast(): boolean {
 function initCastReceiver() {
   // Redirect to sender page if not running on a Cast device
   if (!isRunningOnChromecast()) {
-    console.log("Sendspin: Not running on Cast device, redirecting to sender...");
+    console.log(
+      "Sendspin: Not running on Cast device, redirecting to sender...",
+    );
     window.location.href = "./sender.html";
     return;
   }
@@ -251,45 +263,57 @@ function initCastReceiver() {
   window.setStatus?.("Waiting for sender...");
 
   // Listen for system (hardware) volume changes
-  context.addEventListener(castFramework.system.EventType.SYSTEM_VOLUME_CHANGED, (event: any) => {
-    console.log("Sendspin: System volume changed:", event.data);
-    const hwVol = getHardwareVolume();
-    window.setStatus?.(
-      currentPlayerState.isPlaying
-        ? `Playing · Volume: ${hwVol.volume}%${hwVol.muted ? " (muted)" : ""}`
-        : "Stopped",
-    );
-    // Send volume update to sender
-    const player = (window as any).player as SendspinPlayer | undefined;
-    if (player) {
-      sendPlayerStatus(player);
-    } else {
-      // No player yet, send basic volume update
-      sendStatusToSender({
-        state: "connected",
-        volume: hwVol.volume,
-        muted: hwVol.muted,
-      });
-    }
-  });
+  context.addEventListener(
+    castFramework.system.EventType.SYSTEM_VOLUME_CHANGED,
+    (event: any) => {
+      console.log("Sendspin: System volume changed:", event.data);
+      const hwVol = getHardwareVolume();
+      window.setStatus?.(
+        currentPlayerState.isPlaying
+          ? `Playing · Volume: ${hwVol.volume}%${hwVol.muted ? " (muted)" : ""}`
+          : "Stopped",
+      );
+      // Send volume update to sender
+      const player = (window as any).player as SendspinPlayer | undefined;
+      if (player) {
+        sendPlayerStatus(player);
+      } else {
+        // No player yet, send basic volume update
+        sendStatusToSender({
+          state: "connected",
+          volume: hwVol.volume,
+          muted: hwVol.muted,
+        });
+      }
+    },
+  );
 
   // Cast event listeners
   context.addEventListener(castFramework.system.EventType.READY, () => {
     console.log("Sendspin: Cast receiver READY");
   });
 
-  context.addEventListener(castFramework.system.EventType.SENDER_CONNECTED, () => {
-    console.log("Sendspin: Sender connected");
-  });
+  context.addEventListener(
+    castFramework.system.EventType.SENDER_CONNECTED,
+    () => {
+      console.log("Sendspin: Sender connected");
+    },
+  );
 
-  context.addEventListener(castFramework.system.EventType.SENDER_DISCONNECTED, () => {
-    console.log("Sendspin: Sender disconnected");
-    window.setStatus?.("Disconnected");
-  });
+  context.addEventListener(
+    castFramework.system.EventType.SENDER_DISCONNECTED,
+    () => {
+      console.log("Sendspin: Sender disconnected");
+      window.setStatus?.("Disconnected");
+    },
+  );
 
-  context.addEventListener(castFramework.system.EventType.ERROR, (event: any) => {
-    console.error("Sendspin: Cast error:", event);
-  });
+  context.addEventListener(
+    castFramework.system.EventType.ERROR,
+    (event: any) => {
+      console.error("Sendspin: Cast error:", event);
+    },
+  );
 
   // Listen for custom messages with server URL, player ID, name, and sync delay
   context.addCustomMessageListener(CAST_NAMESPACE, (event: any) => {
@@ -318,7 +342,9 @@ function initCastReceiver() {
       providedSyncDelay = syncDelay;
       console.log("Sendspin: Using sync delay from sender:", syncDelay, "ms");
       // Update existing player if already connected
-      const existingPlayer = (window as any).player as SendspinPlayer | undefined;
+      const existingPlayer = (window as any).player as
+        | SendspinPlayer
+        | undefined;
       if (existingPlayer) {
         existingPlayer.setSyncDelay(syncDelay);
         console.log("Sendspin: Updated sync delay on existing player");
@@ -327,7 +353,8 @@ function initCastReceiver() {
     // Check if codecs changed on an existing player - requires reconnect
     const existingPlayer = (window as any).player as SendspinPlayer | undefined;
     if (existingPlayer && currentPlayerCodecs && providedCodecs) {
-      const codecsChanged = JSON.stringify(providedCodecs) !== JSON.stringify(currentPlayerCodecs);
+      const codecsChanged =
+        JSON.stringify(providedCodecs) !== JSON.stringify(currentPlayerCodecs);
       if (codecsChanged) {
         const targetUrl = serverUrl ?? currentServerUrl;
         if (targetUrl) {

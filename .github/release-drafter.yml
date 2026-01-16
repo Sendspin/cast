@@ -1,0 +1,40 @@
+name-template: "$RESOLVED_VERSION"
+tag-template: "$RESOLVED_VERSION"
+change-template: "- #$NUMBER - $TITLE (@$AUTHOR)"
+categories:
+  - title: "⚠ Breaking Changes"
+    labels:
+      - "breaking-change"
+
+  - title: "🐛 Bugfixes"
+    labels:
+      - "bugfix"
+
+  - title: "🚀 Features"
+    labels:
+      - "feature"
+      - "enhancement"
+
+  - title: "🧰 Maintenance"
+    labels:
+      - "maintenance"
+
+  - title: "⬆️ Dependencies and CI"
+    collapse-after: 1
+    labels:
+      - "dependencies"
+      - "ci"
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+version-resolver:
+  major:
+    labels:
+      - "breaking-change"
+  minor:
+    labels:
+      - "feature"
+      - "enhancement"
+  default: patch
