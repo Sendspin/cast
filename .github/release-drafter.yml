@@ -17,7 +17,6 @@ categories:
 
   - title: "🧰 Maintenance"
     labels:
-      - "ci"
       - "maintenance"
 
   - title: "⬆️ Dependencies and CI"
@@ -36,6 +35,6 @@ version-resolver:
       - "breaking-change"
   minor:
     labels:
-      - "new-feature"
+      - "feature"
       - "enhancement"
   default: patch
