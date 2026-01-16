@@ -165,8 +165,8 @@ async function connectToServer(baseUrl: string) {
   const player = new SendspinPlayer({
     playerId,
     baseUrl,
-    audioOutputMode: "direct", // Output directly to audioContext.destination
     clientName,
+    correctionMode: "sync", // Explicit sync mode for multi-device playback
     syncDelay: providedSyncDelay,
     bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
     // Use codecs from sender config, default to PCM for maximum compatibility
