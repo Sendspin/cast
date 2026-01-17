@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sendspin over Cast</title>
   <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
   <style>
@@ -162,19 +164,13 @@
   </style>
 </head>
 <body>
-  <h1>Sendspin over Cast Demo</h1>
+  <h1>Sendspin over Cast</h1>
   <p class="description">
-    A proof-of-concept implementation of the Sendspin protocol inside a Chromecast receiver app.
-    Since Sendspin uses standard WebSockets, it can run on pretty much anything, including
-    Google Cast and Cast Audio devices. This demo enables
-    on-the-fly speaker grouping without Google Home setup, flexible device combinations
+    Stream audio to Chromecast and Cast Audio devices using the Sendspin protocol.
+    Enable on-the-fly speaker grouping without Google Home setup, flexible device combinations
     beyond Google's restrictions (like pairing a Home Mini with a TV), and grouping with
     other Sendspin-compatible speakers.
   </p>
-
-  <div class="disclaimer">
-    <strong>Note:</strong> This is experimental software. Audio glitches and crackling may still occur.
-  </div>
 
   <div class="tip">
     <strong>Tip:</strong> To cast to multiple speakers, <a href="" target="_blank">open a new tab</a> for each one first,
@@ -183,9 +179,9 @@
 
   <div class="card">
     <div class="server-config">
-      <label for="serverIp">Music Assistant Server IP</label>
-      <input type="text" id="serverIp" placeholder="192.168.1.100">
-      <small>Connects via WebSocket to ws://&lt;ip&gt;:8927/sendspin</small>
+      <label for="serverIp">Sendspin Server</label>
+      <input type="text" id="serverIp" placeholder="http://192.168.1.100:8927">
+      <small>Enter the full URL to your Sendspin server (e.g., http://192.168.1.100:8927)</small>
     </div>
 
     <div class="server-config" style="margin-top: 16px;">
@@ -235,10 +231,10 @@
     }
 
     function getServerUrl() {
-      const ip = document.getElementById('serverIp').value.trim();
-      if (!ip) return null;
-      localStorage.setItem('sendspin_server_ip', ip);
-      return `http://${ip}:8927`;
+      const url = document.getElementById('serverIp').value.trim();
+      if (!url) return null;
+      localStorage.setItem('sendspin_server_ip', url);
+      return url;
     }
 
     function getSyncDelay() {
@@ -357,7 +353,7 @@
                     updateStatus({ state: 'error', message: 'Failed to send config: ' + err });
                   });
               } else {
-                updateStatus({ state: 'error', message: 'No server IP configured' });
+                updateStatus({ state: 'error', message: 'No server URL configured' });
               }
             } else if (state === cast.framework.SessionState.SESSION_ENDED) {
               castSession = null;
@@ -380,7 +376,7 @@
 
       const serverUrl = getServerUrl();
       if (!serverUrl) {
-        document.getElementById('status').textContent = 'Please enter server IP first';
+        document.getElementById('status').textContent = 'Please enter server URL first';
         return;
       }
 
