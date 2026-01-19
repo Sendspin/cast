@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
-  root: "html",
+  root: "src",
   base: "./", // Relative paths for GitHub Pages
   resolve: {
     extensions: [".js", ".json", ".ts"],
@@ -15,8 +15,8 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        index: resolve(__dirname, "html/index.html"),
-        receiver: resolve(__dirname, "html/receiver.html"),
+        index: resolve(__dirname, "src/index.html"),
+        receiver: resolve(__dirname, "src/receiver.html"),
       },
     },
   },
