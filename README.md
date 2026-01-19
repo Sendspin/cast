@@ -8,6 +8,7 @@ Chromecast receiver for Sendspin. It runs a custom Cast receiver web app that co
 ## Quick Start
 
 Prerequisites:
+
 - Node 18+
 - Yarn 1.x (or npm)
 - A Chromecast/Google TV/Cast Audio device on your network
@@ -52,14 +53,14 @@ All messages between sender and receiver use the custom namespace `urn:x-cast:se
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | No* | Message type (`"config"`). Optional for backwards compatibility. |
-| `serverUrl` | string | No | Sendspin server URL. Triggers connection when changed. |
-| `playerId` | string | No | Player ID override. |
-| `playerName` | string | No | Friendly name for the player. |
-| `syncDelay` | number | No | Sync delay in milliseconds (can be negative). |
-| `codecs` | string[] | No | Audio codecs: `["flac"]`, `["opus"]`, or `["pcm"]`. |
+| Field        | Type     | Required | Description                                                      |
+| ------------ | -------- | -------- | ---------------------------------------------------------------- |
+| `type`       | string   | No\*     | Message type (`"config"`). Optional for backwards compatibility. |
+| `serverUrl`  | string   | No       | Sendspin server URL. Triggers connection when changed.           |
+| `playerId`   | string   | No       | Player ID override.                                              |
+| `playerName` | string   | No       | Friendly name for the player.                                    |
+| `syncDelay`  | number   | No       | Sync delay in milliseconds (can be negative).                    |
+| `codecs`     | string[] | No       | Audio codecs: `["flac"]`, `["opus"]`, or `["pcm"]`.              |
 
 ### Receiver → Sender Messages
 
@@ -73,19 +74,23 @@ All messages between sender and receiver use the custom namespace `urn:x-cast:se
   "volume": 75,
   "muted": false,
   "sync": { "synced": true, "offset": 5, "error": 2 },
-  "syncInfo": { "clockDriftPercent": 0.01, "syncErrorMs": 1.5, "resyncCount": 0 }
+  "syncInfo": {
+    "clockDriftPercent": 0.01,
+    "syncErrorMs": 1.5,
+    "resyncCount": 0
+  }
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `type` | string | Message type (`"status"`). |
-| `state` | string | One of: `"connecting"`, `"connected"`, `"playing"`, `"stopped"`, `"error"`. |
-| `message` | string | Human-readable status message. |
-| `volume` | number | Hardware volume (0-100). |
-| `muted` | boolean | Mute state. |
-| `sync` | object | Time sync info: `synced`, `offset` (ms), `error` (ms). |
-| `syncInfo` | object | Detailed sync metrics: `clockDriftPercent`, `syncErrorMs`, `resyncCount`. |
+| Field      | Type    | Description                                                                 |
+| ---------- | ------- | --------------------------------------------------------------------------- |
+| `type`     | string  | Message type (`"status"`).                                                  |
+| `state`    | string  | One of: `"connecting"`, `"connected"`, `"playing"`, `"stopped"`, `"error"`. |
+| `message`  | string  | Human-readable status message.                                              |
+| `volume`   | number  | Hardware volume (0-100).                                                    |
+| `muted`    | boolean | Mute state.                                                                 |
+| `sync`     | object  | Time sync info: `synced`, `offset` (ms), `error` (ms).                      |
+| `syncInfo` | object  | Detailed sync metrics: `clockDriftPercent`, `syncErrorMs`, `resyncCount`.   |
 
 ## Development Setup
 
@@ -93,7 +98,7 @@ To develop and test the Cast receiver, you need to set up a Cast developer accou
 
 1. Go to the [Google Cast SDK Developer Console](https://cast.google.com/publish/#/overview) and sign in with your Google account.
 2. Create a new application and select "Custom Receiver".
-3. Set the receiver URL to a accessible URL where your dev server hosts the receiver (e.g., `http://<your-ip>:4173/receiver.html`).
+3. Set the receiver URL to a accessible URL where your dev server hosts the receiver (e.g., `http://<your-ip>:3001/receiver.html`).
 4. Note the Application ID assigned to your app.
 
 ## Development

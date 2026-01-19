@@ -1,55 +1,55 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sendspin over Cast</title>
-  <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-  <style>
-    body {
-      background: #121212;
-      color: #fff;
-      font-family: 'Google Sans', 'Roboto', sans-serif;
-      margin: 0;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-    }
-    #title {
-      font-size: 48px;
-      font-weight: 300;
-      margin-bottom: 16px;
-      opacity: 0.9;
-    }
-    #status {
-      font-size: 24px;
-      opacity: 0.6;
-    }
-    #debug {
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      font-size: 14px;
-      font-family: monospace;
-      opacity: 0.4;
-    }
-  </style>
-</head>
-<body>
-  <div id="title">Sendspin</div>
-  <div id="status">Ready to play</div>
-  <div id="debug"></div>
-  <script>
-    // UI helpers - exposed globally for main.ts
-    window.setStatus = function(text) {
-      document.getElementById('status').textContent = text;
-    }
-    window.setDebug = function(text) {
-      document.getElementById('debug').textContent = text;
-    }
-  </script>
-  <script type="module" src="../src/main.ts"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sendspin over Cast</title>
+    <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <style>
+      body {
+        background: #121212;
+        color: #fff;
+        font-family: "Google Sans", "Roboto", sans-serif;
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      }
+      #title {
+        font-size: 48px;
+        font-weight: 300;
+        margin-bottom: 16px;
+        opacity: 0.9;
+      }
+      #status {
+        font-size: 24px;
+        opacity: 0.6;
+      }
+      #debug {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        font-size: 14px;
+        font-family: monospace;
+        opacity: 0.4;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="title">Sendspin</div>
+    <div id="status">Ready to play</div>
+    <div id="debug"></div>
+    <script>
+      // UI helpers - exposed globally for main.ts
+      window.setStatus = function (text) {
+        document.getElementById("status").textContent = text;
+      };
+      window.setDebug = function (text) {
+        document.getElementById("debug").textContent = text;
+      };
+    </script>
+    <script type="module" src="../src/main.ts"></script>
+  </body>
 </html>

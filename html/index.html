@@ -1,451 +1,543 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sendspin over Cast</title>
-  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      padding: 40px 20px;
-      max-width: 500px;
-      margin: 0 auto;
-      background: #fafafa;
-      color: #333;
-      line-height: 1.6;
-    }
-    h1 {
-      margin: 0 0 10px 0;
-      font-size: 28px;
-      font-weight: 600;
-    }
-    .description {
-      color: #666;
-      margin-bottom: 30px;
-      font-size: 14px;
-    }
-    .disclaimer {
-      background: #fff3cd;
-      border: 1px solid #ffc107;
-      border-radius: 8px;
-      padding: 12px 16px;
-      margin-bottom: 16px;
-      font-size: 13px;
-      color: #856404;
-    }
-    .tip {
-      background: #e7f3ff;
-      border: 1px solid #4285f4;
-      border-radius: 8px;
-      padding: 12px 16px;
-      margin-bottom: 24px;
-      font-size: 13px;
-      color: #1a56db;
-    }
-    .tip a {
-      color: inherit;
-      text-decoration: underline;
-    }
-    .card {
-      background: white;
-      border-radius: 12px;
-      padding: 24px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-      margin-bottom: 20px;
-    }
-    .server-config label {
-      display: block;
-      margin-bottom: 8px;
-      font-weight: 600;
-      font-size: 14px;
-    }
-    .server-config input {
-      padding: 12px 14px;
-      font-size: 16px;
-      width: 100%;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      transition: border-color 0.2s;
-    }
-    .server-config input:focus {
-      outline: none;
-      border-color: #4285f4;
-    }
-    .server-config input.error {
-      border-color: #ea4335;
-      background-color: #fef2f2;
-    }
-    .server-config small {
-      color: #888;
-      display: block;
-      margin-top: 8px;
-      font-size: 12px;
-    }
-    .buttons {
-      display: flex;
-      gap: 10px;
-      margin-top: 20px;
-      flex-wrap: wrap;
-    }
-    button {
-      padding: 12px 24px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      border: none;
-      border-radius: 8px;
-      transition: all 0.2s;
-    }
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    #castBtn {
-      background: #4285f4;
-      color: white;
-    }
-    #castBtn:hover:not(:disabled) {
-      background: #3367d6;
-    }
-    #stopBtn {
-      background: #ea4335;
-      color: white;
-    }
-    #stopBtn:hover:not(:disabled) {
-      background: #c5221f;
-    }
-    #status {
-      margin-top: 20px;
-      padding: 16px;
-      background: #f1f3f4;
-      border-radius: 8px;
-      font-size: 14px;
-      color: #555;
-    }
-    .status-state {
-      font-weight: 600;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #9aa0a6;
-    }
-    .status-dot.connecting { background: #fbbc04; }
-    .status-dot.connected { background: #34a853; }
-    .status-dot.playing { background: #34a853; animation: pulse 1.5s infinite; }
-    .status-dot.stopped { background: #9aa0a6; }
-    .status-dot.error { background: #ea4335; }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-    .status-details {
-      font-size: 13px;
-      color: #666;
-    }
-    .status-sync {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 6px;
-      font-size: 12px;
-      color: #888;
-    }
-    .sync-badge {
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-weight: 500;
-    }
-    .sync-badge.synced { background: #e6f4ea; color: #137333; }
-    .sync-badge.syncing { background: #fef7e0; color: #b06000; }
-  </style>
-</head>
-<body>
-  <h1>Sendspin over Cast</h1>
-  <p class="description">
-    Stream audio to Chromecast and Cast Audio devices using the Sendspin protocol.
-    Enable on-the-fly speaker grouping without Google Home setup, flexible device combinations
-    beyond Google's restrictions (like pairing a Home Mini with a TV), and grouping with
-    other Sendspin-compatible speakers.
-  </p>
-
-  <div class="tip">
-    <strong>Tip:</strong> To cast to multiple speakers, <a href="" target="_blank">open a new tab</a> for each one first,
-    then start casting in each tab.
-  </div>
-
-  <div id="customAppIdNotice" class="disclaimer" style="display: none;">
-    <strong>Using custom App ID:</strong> <span id="customAppIdValue"></span>
-  </div>
-
-  <div class="card">
-    <div class="server-config">
-      <label for="serverIp">Sendspin Server</label>
-      <input type="text" id="serverIp" placeholder="http://192.168.1.100:8927">
-      <small>Enter the full URL to your Sendspin server (e.g., http://192.168.1.100:8927)</small>
-    </div>
-
-    <div class="server-config" style="margin-top: 16px;">
-      <label for="syncDelay">Sync Delay (ms)</label>
-      <input type="number" id="syncDelay" placeholder="0" value="0" style="width: 100px;">
-      <small>Positive delays playback, negative advances it. Changes apply instantly.</small>
-    </div>
-
-    <div class="server-config" style="margin-top: 16px;">
-      <label for="codec">Audio Codec</label>
-      <select id="codec" style="padding: 10px 12px; font-size: 14px; border: 1px solid #ddd; border-radius: 8px;">
-        <option value="flac">FLAC</option>
-        <option value="opus">Opus</option>
-        <option value="pcm">PCM (uncompressed)</option>
-      </select>
-      <small>FLAC offers good compression with lossless quality. Opus provides better compression but may have compatibility issues on some Cast devices. PCM is uncompressed and uses more bandwidth.</small>
-    </div>
-
-    <div class="buttons">
-      <button id="castBtn" onclick="startCasting()" disabled>Cast to Device</button>
-      <button id="stopBtn" onclick="stopCasting()" disabled>Stop Casting</button>
-    </div>
-
-    <div id="status">Loading Cast SDK...</div>
-  </div>
-
-  <div id="devFooter" style="display: none; margin-top: 20px; text-align: center;">
-    <a href="#" id="customizeAppId" style="color: #666; font-size: 12px;">Customize App ID</a>
-  </div>
-
-  <script>
-    const DEFAULT_APP_ID = '938CBF87';
-    const CAST_NAMESPACE = 'urn:x-cast:sendspin';
-    let castContext = null;
-    let castSession = null;
-
-    // Check if running on localhost
-    const isLocalhost = ['localhost', '127.0.0.1', ''].includes(window.location.hostname);
-
-    // Load saved settings from localStorage or URL query params
-    const urlParams = new URLSearchParams(window.location.search);
-    const hostFromUrl = urlParams.get('host');
-    const savedIp = hostFromUrl || localStorage.getItem('sendspin_server_ip');
-    if (savedIp) {
-      document.getElementById('serverIp').value = savedIp;
-    }
-    const savedSyncDelay = localStorage.getItem('sendspin_sync_delay');
-    if (savedSyncDelay) {
-      document.getElementById('syncDelay').value = savedSyncDelay;
-    }
-    const savedCodec = localStorage.getItem('sendspin_codec');
-    if (savedCodec) {
-      document.getElementById('codec').value = savedCodec;
-    }
-
-    // Get app ID from query param (localhost only) or use default
-    const appIdFromUrl = isLocalhost ? urlParams.get('appId') : null;
-    const APP_ID = appIdFromUrl || DEFAULT_APP_ID;
-
-    // Show custom app ID notice if using non-default
-    if (appIdFromUrl) {
-      document.getElementById('customAppIdNotice').style.display = 'block';
-      document.getElementById('customAppIdValue').textContent = appIdFromUrl;
-    }
-
-    // Show dev footer on localhost
-    if (isLocalhost) {
-      document.getElementById('devFooter').style.display = 'block';
-      document.getElementById('customizeAppId').addEventListener('click', (e) => {
-        e.preventDefault();
-        const newAppId = prompt('Enter custom Cast App ID:', APP_ID);
-        if (newAppId && newAppId.trim()) {
-          const url = new URL(window.location.href);
-          url.searchParams.set('appId', newAppId.trim());
-          window.location.href = url.toString();
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sendspin over Cast</title>
+    <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        padding: 40px 20px;
+        max-width: 500px;
+        margin: 0 auto;
+        background: #fafafa;
+        color: #333;
+        line-height: 1.6;
+      }
+      h1 {
+        margin: 0 0 10px 0;
+        font-size: 28px;
+        font-weight: 600;
+      }
+      .description {
+        color: #666;
+        margin-bottom: 30px;
+        font-size: 14px;
+      }
+      .disclaimer {
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        font-size: 13px;
+        color: #856404;
+      }
+      .tip {
+        background: #e7f3ff;
+        border: 1px solid #4285f4;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 24px;
+        font-size: 13px;
+        color: #1a56db;
+      }
+      .tip a {
+        color: inherit;
+        text-decoration: underline;
+      }
+      .card {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        margin-bottom: 20px;
+      }
+      .server-config label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        font-size: 14px;
+      }
+      .server-config input {
+        padding: 12px 14px;
+        font-size: 16px;
+        width: 100%;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        transition: border-color 0.2s;
+      }
+      .server-config input:focus {
+        outline: none;
+        border-color: #4285f4;
+      }
+      .server-config input.error {
+        border-color: #ea4335;
+        background-color: #fef2f2;
+      }
+      .server-config small {
+        color: #888;
+        display: block;
+        margin-top: 8px;
+        font-size: 12px;
+      }
+      .buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+      }
+      button {
+        padding: 12px 24px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+        border-radius: 8px;
+        transition: all 0.2s;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      #castBtn {
+        background: #4285f4;
+        color: white;
+      }
+      #castBtn:hover:not(:disabled) {
+        background: #3367d6;
+      }
+      #stopBtn {
+        background: #ea4335;
+        color: white;
+      }
+      #stopBtn:hover:not(:disabled) {
+        background: #c5221f;
+      }
+      #status {
+        margin-top: 20px;
+        padding: 16px;
+        background: #f1f3f4;
+        border-radius: 8px;
+        font-size: 14px;
+        color: #555;
+      }
+      .status-state {
+        font-weight: 600;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #9aa0a6;
+      }
+      .status-dot.connecting {
+        background: #fbbc04;
+      }
+      .status-dot.connected {
+        background: #34a853;
+      }
+      .status-dot.playing {
+        background: #34a853;
+        animation: pulse 1.5s infinite;
+      }
+      .status-dot.stopped {
+        background: #9aa0a6;
+      }
+      .status-dot.error {
+        background: #ea4335;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
         }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      .status-details {
+        font-size: 13px;
+        color: #666;
+      }
+      .status-sync {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+        font-size: 12px;
+        color: #888;
+      }
+      .sync-badge {
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-weight: 500;
+      }
+      .sync-badge.synced {
+        background: #e6f4ea;
+        color: #137333;
+      }
+      .sync-badge.syncing {
+        background: #fef7e0;
+        color: #b06000;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Sendspin over Cast</h1>
+    <p class="description">
+      Stream audio to Chromecast and Cast Audio devices using the Sendspin
+      protocol. Enable on-the-fly speaker grouping without Google Home setup,
+      flexible device combinations beyond Google's restrictions (like pairing a
+      Home Mini with a TV), and grouping with other Sendspin-compatible
+      speakers.
+    </p>
+
+    <div class="tip">
+      <strong>Tip:</strong> To cast to multiple speakers,
+      <a href="" target="_blank">open a new tab</a> for each one first, then
+      start casting in each tab.
+    </div>
+
+    <div id="customAppIdNotice" class="disclaimer" style="display: none">
+      <strong>Using custom App ID:</strong> <span id="customAppIdValue"></span>
+    </div>
+
+    <div class="card">
+      <div class="server-config">
+        <label for="serverIp">Sendspin Server</label>
+        <input
+          type="text"
+          id="serverIp"
+          placeholder="http://192.168.1.100:8927"
+        />
+        <small
+          >Enter the full URL to your Sendspin server (e.g.,
+          http://192.168.1.100:8927)</small
+        >
+      </div>
+
+      <div class="server-config" style="margin-top: 16px">
+        <label for="syncDelay">Sync Delay (ms)</label>
+        <input
+          type="number"
+          id="syncDelay"
+          placeholder="0"
+          value="0"
+          style="width: 100px"
+        />
+        <small
+          >Positive delays playback, negative advances it. Changes apply
+          instantly.</small
+        >
+      </div>
+
+      <div class="server-config" style="margin-top: 16px">
+        <label for="codec">Audio Codec</label>
+        <select
+          id="codec"
+          style="
+            padding: 10px 12px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+          "
+        >
+          <option value="flac">FLAC</option>
+          <option value="opus">Opus</option>
+          <option value="pcm">PCM (uncompressed)</option>
+        </select>
+        <small
+          >FLAC offers good compression with lossless quality. Opus provides
+          better compression but may have compatibility issues on some Cast
+          devices. PCM is uncompressed and uses more bandwidth.</small
+        >
+      </div>
+
+      <div class="buttons">
+        <button id="castBtn" onclick="startCasting()" disabled>
+          Cast to Device
+        </button>
+        <button id="stopBtn" onclick="stopCasting()" disabled>
+          Stop Casting
+        </button>
+      </div>
+
+      <div id="status">Loading Cast SDK...</div>
+    </div>
+
+    <div
+      id="devFooter"
+      style="display: none; margin-top: 20px; text-align: center"
+    >
+      <a href="#" id="customizeAppId" style="color: #666; font-size: 12px"
+        >Customize App ID</a
+      >
+    </div>
+
+    <script>
+      const DEFAULT_APP_ID = "938CBF87";
+      const CAST_NAMESPACE = "urn:x-cast:sendspin";
+      let castContext = null;
+      let castSession = null;
+
+      // Check if running on localhost
+      const isLocalhost = ["localhost", "127.0.0.1", ""].includes(
+        window.location.hostname,
+      );
+
+      // Load saved settings from localStorage or URL query params
+      const urlParams = new URLSearchParams(window.location.search);
+      const hostFromUrl = urlParams.get("host");
+      const savedIp = hostFromUrl || localStorage.getItem("sendspin_server_ip");
+      if (savedIp) {
+        document.getElementById("serverIp").value = savedIp;
+      }
+      const savedSyncDelay = localStorage.getItem("sendspin_sync_delay");
+      if (savedSyncDelay) {
+        document.getElementById("syncDelay").value = savedSyncDelay;
+      }
+      const savedCodec = localStorage.getItem("sendspin_codec");
+      if (savedCodec) {
+        document.getElementById("codec").value = savedCodec;
+      }
+
+      // Get app ID from query param (localhost only) or use default
+      const appIdFromUrl = isLocalhost ? urlParams.get("appId") : null;
+      const APP_ID = appIdFromUrl || DEFAULT_APP_ID;
+
+      // Show custom app ID notice if using non-default
+      if (appIdFromUrl) {
+        document.getElementById("customAppIdNotice").style.display = "block";
+        document.getElementById("customAppIdValue").textContent = appIdFromUrl;
+      }
+
+      // Show dev footer on localhost
+      if (isLocalhost) {
+        document.getElementById("devFooter").style.display = "block";
+        document
+          .getElementById("customizeAppId")
+          .addEventListener("click", (e) => {
+            e.preventDefault();
+            const newAppId = prompt("Enter custom Cast App ID:", APP_ID);
+            if (newAppId && newAppId.trim()) {
+              const url = new URL(window.location.href);
+              url.searchParams.set("appId", newAppId.trim());
+              window.location.href = url.toString();
+            }
+          });
+      }
+
+      // Clear error state when user types in server field
+      document.getElementById("serverIp").addEventListener("input", () => {
+        document.getElementById("serverIp").classList.remove("error");
       });
-    }
 
-    // Clear error state when user types in server field
-    document.getElementById('serverIp').addEventListener('input', () => {
-      document.getElementById('serverIp').classList.remove('error');
-    });
+      function getServerUrl() {
+        const url = document.getElementById("serverIp").value.trim();
+        if (!url) return null;
+        localStorage.setItem("sendspin_server_ip", url);
+        return url;
+      }
 
-    function getServerUrl() {
-      const url = document.getElementById('serverIp').value.trim();
-      if (!url) return null;
-      localStorage.setItem('sendspin_server_ip', url);
-      return url;
-    }
+      function getSyncDelay() {
+        const delay =
+          parseInt(document.getElementById("syncDelay").value, 10) || 0;
+        localStorage.setItem("sendspin_sync_delay", delay.toString());
+        return delay;
+      }
 
-    function getSyncDelay() {
-      const delay = parseInt(document.getElementById('syncDelay').value, 10) || 0;
-      localStorage.setItem('sendspin_sync_delay', delay.toString());
-      return delay;
-    }
+      function getCodecs() {
+        const codec = document.getElementById("codec").value;
+        localStorage.setItem("sendspin_codec", codec);
+        return [codec];
+      }
 
-    function getCodecs() {
-      const codec = document.getElementById('codec').value;
-      localStorage.setItem('sendspin_codec', codec);
-      return [codec];
-    }
+      function setStatus(text) {
+        document.getElementById("status").innerHTML = text;
+      }
 
-    function setStatus(text) {
-      document.getElementById('status').innerHTML = text;
-    }
+      function updateStatus(data) {
+        const stateLabels = {
+          connecting: "Connecting...",
+          connected: "Connected",
+          playing: "Playing",
+          stopped: "Stopped",
+          error: "Error",
+        };
 
-    function updateStatus(data) {
-      const stateLabels = {
-        connecting: 'Connecting...',
-        connected: 'Connected',
-        playing: 'Playing',
-        stopped: 'Stopped',
-        error: 'Error'
-      };
+        const showVolume =
+          data.volume !== undefined &&
+          (data.state === "playing" || data.state === "stopped");
 
-      const showVolume = data.volume !== undefined && (data.state === 'playing' || data.state === 'stopped');
-
-      let html = `<div class="status-state">
+        let html = `<div class="status-state">
         <span class="status-dot ${data.state}"></span>
         ${stateLabels[data.state] || data.state}
-        ${showVolume ? `<span style="margin-left: auto; font-weight: normal; color: #666;">Volume: ${data.volume}%${data.muted ? ' (muted)' : ''}</span>` : ''}
+        ${showVolume ? `<span style="margin-left: auto; font-weight: normal; color: #666;">Volume: ${data.volume}%${data.muted ? " (muted)" : ""}</span>` : ""}
       </div>`;
 
-      if (data.message) {
-        html += `<div class="status-details">${data.message}</div>`;
-      }
+        if (data.message) {
+          html += `<div class="status-details">${data.message}</div>`;
+        }
 
-      if (data.sync) {
-        if (data.sync.synced) {
-          html += `<div class="status-sync">
+        if (data.sync) {
+          if (data.sync.synced) {
+            html += `<div class="status-sync">
             <span class="sync-badge synced">Synced</span>
-            <span>${data.sync.offset > 0 ? '+' : ''}${data.sync.offset}ms ±${data.sync.error}ms</span>
+            <span>${data.sync.offset > 0 ? "+" : ""}${data.sync.offset}ms ±${data.sync.error}ms</span>
           </div>`;
-        } else {
-          html += `<div class="status-sync">
+          } else {
+            html += `<div class="status-sync">
             <span class="sync-badge syncing">Syncing...</span>
           </div>`;
+          }
         }
-      }
 
-      if (data.syncInfo) {
-        const drift = data.syncInfo.clockDriftPercent;
-        const driftSign = drift >= 0 ? '+' : '';
-        const error = data.syncInfo.syncErrorMs.toFixed(1);
-        const resyncs = data.syncInfo.resyncCount;
-        html += `<div class="status-sync">
+        if (data.syncInfo) {
+          const drift = data.syncInfo.clockDriftPercent;
+          const driftSign = drift >= 0 ? "+" : "";
+          const error = data.syncInfo.syncErrorMs.toFixed(1);
+          const resyncs = data.syncInfo.resyncCount;
+          html += `<div class="status-sync">
           <span style="color: #666;">Drift: ${driftSign}${drift.toFixed(2)}% · Error: ${error}ms · Resyncs: ${resyncs}</span>
         </div>`;
+        }
+
+        setStatus(html);
       }
 
-      setStatus(html);
-    }
-
-    function setupMessageListener() {
-      if (!castSession) return;
-      castSession.addMessageListener(CAST_NAMESPACE, (namespace, message) => {
-        console.log('Received from receiver:', message);
-        if (typeof message === 'string') {
-          try { message = JSON.parse(message); } catch(e) {}
-        }
-        if (message && message.state) {
-          updateStatus(message);
-        }
-      });
-    }
-
-    window['__onGCastApiAvailable'] = function(isAvailable) {
-      if (isAvailable) {
-        initializeCast();
-      } else {
-        document.getElementById('status').textContent = 'Cast SDK not available. Use Chrome browser.';
-      }
-    };
-
-    function initializeCast() {
-      try {
-        castContext = cast.framework.CastContext.getInstance();
-        castContext.setOptions({
-          receiverApplicationId: APP_ID,
-          autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
-        });
-
-        castContext.addEventListener(
-          cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
-          (event) => {
-            const state = event.sessionState;
-
-            if (state === cast.framework.SessionState.SESSION_STARTED) {
-              castSession = castContext.getCurrentSession();
-              document.getElementById('stopBtn').disabled = false;
-              document.getElementById('castBtn').disabled = true;
-
-              // Listen for messages from receiver
-              setupMessageListener();
-
-              // Send server URL and config to receiver
-              const serverUrl = getServerUrl();
-              const syncDelay = getSyncDelay();
-              const codecs = getCodecs();
-              if (serverUrl) {
-                updateStatus({ state: 'connecting', message: 'Starting receiver...' });
-                castSession.sendMessage(CAST_NAMESPACE, { type: 'config', serverUrl, syncDelay, codecs })
-                  .catch((err) => {
-                    updateStatus({ state: 'error', message: 'Failed to send config: ' + err });
-                  });
-              } else {
-                updateStatus({ state: 'error', message: 'No server URL configured' });
-              }
-            } else if (state === cast.framework.SessionState.SESSION_ENDED) {
-              castSession = null;
-              document.getElementById('stopBtn').disabled = true;
-              document.getElementById('castBtn').disabled = false;
-              document.getElementById('status').textContent = 'Ready to cast';
-            }
+      function setupMessageListener() {
+        if (!castSession) return;
+        castSession.addMessageListener(CAST_NAMESPACE, (namespace, message) => {
+          console.log("Received from receiver:", message);
+          if (typeof message === "string") {
+            try {
+              message = JSON.parse(message);
+            } catch (e) {}
           }
-        );
-
-        document.getElementById('castBtn').disabled = false;
-        document.getElementById('status').textContent = 'Ready to cast';
-      } catch (e) {
-        document.getElementById('status').textContent = 'Error: ' + e.message;
-      }
-    }
-
-    function startCasting() {
-      if (!castContext) return;
-
-      const serverUrl = getServerUrl();
-      if (!serverUrl) {
-        const serverInput = document.getElementById('serverIp');
-        serverInput.classList.add('error');
-        serverInput.focus();
-        document.getElementById('status').textContent = 'Please enter server URL first';
-        return;
+          if (message && message.state) {
+            updateStatus(message);
+          }
+        });
       }
 
-      castContext.requestSession().catch((error) => {
-        document.getElementById('status').textContent = 'Cast error: ' + error;
+      window["__onGCastApiAvailable"] = function (isAvailable) {
+        if (isAvailable) {
+          initializeCast();
+        } else {
+          document.getElementById("status").textContent =
+            "Cast SDK not available. Use Chrome browser.";
+        }
+      };
+
+      function initializeCast() {
+        try {
+          castContext = cast.framework.CastContext.getInstance();
+          castContext.setOptions({
+            receiverApplicationId: APP_ID,
+            autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
+          });
+
+          castContext.addEventListener(
+            cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
+            (event) => {
+              const state = event.sessionState;
+
+              if (state === cast.framework.SessionState.SESSION_STARTED) {
+                castSession = castContext.getCurrentSession();
+                document.getElementById("stopBtn").disabled = false;
+                document.getElementById("castBtn").disabled = true;
+
+                // Listen for messages from receiver
+                setupMessageListener();
+
+                // Send server URL and config to receiver
+                const serverUrl = getServerUrl();
+                const syncDelay = getSyncDelay();
+                const codecs = getCodecs();
+                if (serverUrl) {
+                  updateStatus({
+                    state: "connecting",
+                    message: "Starting receiver...",
+                  });
+                  castSession
+                    .sendMessage(CAST_NAMESPACE, {
+                      type: "config",
+                      serverUrl,
+                      syncDelay,
+                      codecs,
+                    })
+                    .catch((err) => {
+                      updateStatus({
+                        state: "error",
+                        message: "Failed to send config: " + err,
+                      });
+                    });
+                } else {
+                  updateStatus({
+                    state: "error",
+                    message: "No server URL configured",
+                  });
+                }
+              } else if (state === cast.framework.SessionState.SESSION_ENDED) {
+                castSession = null;
+                document.getElementById("stopBtn").disabled = true;
+                document.getElementById("castBtn").disabled = false;
+                document.getElementById("status").textContent = "Ready to cast";
+              }
+            },
+          );
+
+          document.getElementById("castBtn").disabled = false;
+          document.getElementById("status").textContent = "Ready to cast";
+        } catch (e) {
+          document.getElementById("status").textContent = "Error: " + e.message;
+        }
+      }
+
+      function startCasting() {
+        if (!castContext) return;
+
+        const serverUrl = getServerUrl();
+        if (!serverUrl) {
+          const serverInput = document.getElementById("serverIp");
+          serverInput.classList.add("error");
+          serverInput.focus();
+          document.getElementById("status").textContent =
+            "Please enter server URL first";
+          return;
+        }
+
+        castContext.requestSession().catch((error) => {
+          document.getElementById("status").textContent =
+            "Cast error: " + error;
+        });
+      }
+
+      function stopCasting() {
+        if (castSession) {
+          castSession.endSession(true);
+        }
+      }
+
+      // Live update sync delay when changed during active session
+      document.getElementById("syncDelay").addEventListener("input", () => {
+        if (!castSession) return;
+        const syncDelay = getSyncDelay();
+        castSession
+          .sendMessage(CAST_NAMESPACE, { type: "config", syncDelay })
+          .then(() => console.log("Sent sync delay update:", syncDelay))
+          .catch((err) => console.error("Failed to send sync delay:", err));
       });
-    }
-
-    function stopCasting() {
-      if (castSession) {
-        castSession.endSession(true);
-      }
-    }
-
-    // Live update sync delay when changed during active session
-    document.getElementById('syncDelay').addEventListener('input', () => {
-      if (!castSession) return;
-      const syncDelay = getSyncDelay();
-      castSession.sendMessage(CAST_NAMESPACE, { type: 'config', syncDelay })
-        .then(() => console.log('Sent sync delay update:', syncDelay))
-        .catch((err) => console.error('Failed to send sync delay:', err));
-    });
-  </script>
-</body>
+    </script>
+  </body>
 </html>
