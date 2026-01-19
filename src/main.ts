@@ -32,6 +32,7 @@ function isCodec(value: unknown): value is Codec {
 
 // Cast context for sending messages back to sender
 let castContext: any = null;
+let player: SendspinPlayer | undefined;
 
 // Get hardware volume from Cast system (0-100 scale)
 function getHardwareVolume(): { volume: number; muted: boolean } {
@@ -153,10 +154,9 @@ async function connectToServer(baseUrl: string) {
     clearInterval(statusIntervalId);
     statusIntervalId = null;
   }
-  const existingPlayer = (window as any).player as SendspinPlayer | undefined;
-  if (existingPlayer) {
+  if (player) {
     console.log("Sendspin: Disconnecting existing player before reconnect");
-    existingPlayer.disconnect();
+    player.disconnect();
   }
 
   const playerId = getPlayerId();
@@ -173,7 +173,7 @@ async function connectToServer(baseUrl: string) {
 
   console.log("Sendspin: Using sync delay:", providedSyncDelay, "ms");
 
-  const player = new SendspinPlayer({
+  const newPlayer = new SendspinPlayer({
     playerId,
     baseUrl,
     clientName,
@@ -200,13 +200,14 @@ async function connectToServer(baseUrl: string) {
       } else {
         window.setStatus?.("Stopped");
       }
-      sendPlayerStatus(player);
-      updateDebug(player);
+      sendPlayerStatus(newPlayer);
+      updateDebug(newPlayer);
     },
   });
+  player = newPlayer;
 
   try {
-    await player.connect();
+    await newPlayer.connect();
     console.log("Sendspin: Connected - ready to play");
     window.setStatus?.("Ready to play");
     sendStatusToSender({ state: "connected", message: "Ready to play" });
@@ -215,13 +216,10 @@ async function connectToServer(baseUrl: string) {
     currentServerUrl = baseUrl;
     currentPlayerCodecs = providedCodecs ?? DEFAULT_CODECS;
 
-    // Expose player globally for debugging
-    (window as any).player = player;
-
     // Periodically send status to sender
     statusIntervalId = setInterval(() => {
-      updateDebug(player);
-      sendPlayerStatus(player);
+      updateDebug(newPlayer);
+      sendPlayerStatus(newPlayer);
     }, 1000);
   } catch (error) {
     console.error("Sendspin: Connection failed:", error);
@@ -277,7 +275,6 @@ function tryInitCastReceiver(): boolean {
           : "Stopped",
       );
       // Send volume update to sender
-      const player = (window as any).player as SendspinPlayer | undefined;
       if (player) {
         sendPlayerStatus(player);
       } else {
@@ -324,7 +321,6 @@ function tryInitCastReceiver(): boolean {
     if (!event.data) {
       return;
     }
-    const existingPlayer = (window as any).player as SendspinPlayer | undefined;
 
     // type = "config"
     const serverUrl = event.data.serverUrl;
@@ -352,14 +348,14 @@ function tryInitCastReceiver(): boolean {
       providedSyncDelay = syncDelay;
       console.log("Sendspin: Using sync delay from sender:", syncDelay, "ms");
       // Update existing player if already connected
-      if (existingPlayer) {
-        existingPlayer.setSyncDelay(syncDelay);
+      if (player) {
+        player.setSyncDelay(syncDelay);
         console.log("Sendspin: Updated sync delay on existing player");
       }
     }
     // Check if codecs changed on an existing player - requires reconnect
     if (
-      existingPlayer &&
+      player &&
       currentPlayerCodecs &&
       providedCodecs &&
       // Check for actual changes in codecs
