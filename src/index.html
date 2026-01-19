@@ -272,6 +272,26 @@
         </button>
       </div>
 
+      <div id="volumeControl" style="margin-top: 20px; display: none">
+        <label
+          style="
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 14px;
+          "
+          >Volume: <span id="volumeValue">50</span>%</label
+        >
+        <input
+          type="range"
+          id="volumeSlider"
+          min="0"
+          max="100"
+          value="50"
+          style="width: 100%"
+        />
+      </div>
+
       <div id="status">Loading Cast SDK...</div>
     </div>
 
@@ -379,6 +399,14 @@
           data.volume !== undefined &&
           (data.state === "playing" || data.state === "stopped");
 
+        // Update volume slider from receiver status
+        if (data.volume !== undefined) {
+          const slider = document.getElementById("volumeSlider");
+          const valueDisplay = document.getElementById("volumeValue");
+          slider.value = data.volume;
+          valueDisplay.textContent = data.volume;
+        }
+
         let html = `<div class="status-state">
         <span class="status-dot ${data.state}"></span>
         ${stateLabels[data.state] || data.state}
@@ -456,6 +484,8 @@
                 castSession = castContext.getCurrentSession();
                 document.getElementById("stopBtn").disabled = false;
                 document.getElementById("castBtn").disabled = true;
+                document.getElementById("volumeControl").style.display =
+                  "block";
 
                 // Listen for messages from receiver
                 setupMessageListener();
@@ -492,6 +522,7 @@
                 castSession = null;
                 document.getElementById("stopBtn").disabled = true;
                 document.getElementById("castBtn").disabled = false;
+                document.getElementById("volumeControl").style.display = "none";
                 document.getElementById("status").textContent = "Ready to cast";
               }
             },
@@ -537,6 +568,23 @@
           .sendMessage(CAST_NAMESPACE, { type: "config", syncDelay })
           .then(() => console.log("Sent sync delay update:", syncDelay))
           .catch((err) => console.error("Failed to send sync delay:", err));
+      });
+
+      // Handle volume slider changes
+      document.getElementById("volumeSlider").addEventListener("input", (e) => {
+        const volume = parseInt(e.target.value, 10);
+        document.getElementById("volumeValue").textContent = volume;
+
+        if (!castSession) return;
+
+        castSession
+          .sendMessage(CAST_NAMESPACE, {
+            type: "set-volume",
+            volume: volume,
+            muted: false,
+          })
+          .then(() => console.log("Sent volume update:", volume))
+          .catch((err) => console.error("Failed to send volume:", err));
       });
     </script>
   </body>

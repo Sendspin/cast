@@ -322,6 +322,26 @@ function tryInitCastReceiver(): boolean {
       return;
     }
 
+    // Handle set-volume message
+    if (event.data.type === "set-volume") {
+      const volume = event.data.volume;
+      const muted = event.data.muted;
+      if (typeof volume === "number" && volume >= 0 && volume <= 100) {
+        setHardwareVolume(volume, muted ?? false);
+        // Send updated status back to sender
+        if (player) {
+          sendPlayerStatus(player);
+        } else {
+          sendStatusToSender({
+            state: "connected",
+            volume,
+            muted: muted ?? false,
+          });
+        }
+      }
+      return;
+    }
+
     // type = "config"
     const serverUrl = event.data.serverUrl;
     const playerId = event.data.playerId;

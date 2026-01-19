@@ -62,6 +62,22 @@ All messages between sender and receiver use the custom namespace `urn:x-cast:se
 | `syncDelay`  | number   | No       | Sync delay in milliseconds (can be negative).                    |
 | `codecs`     | string[] | No       | Audio codecs: `["flac"]`, `["opus"]`, or `["pcm"]`.              |
 
+**Set Volume message** (`type: "set-volume"`): Sent to control the hardware volume on the receiver.
+
+```json
+{
+  "type": "set-volume",
+  "volume": 75,
+  "muted": false
+}
+```
+
+| Field    | Type    | Required | Description                       |
+| -------- | ------- | -------- | --------------------------------- |
+| `type`   | string  | Yes      | Message type (`"set-volume"`).    |
+| `volume` | number  | Yes      | Volume level (0-100).             |
+| `muted`  | boolean | No       | Mute state (defaults to `false`). |
+
 ### Receiver → Sender Messages
 
 **Status message** (`type: "status"`): Sent periodically by the receiver to report player state.
