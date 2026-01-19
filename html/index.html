@@ -73,6 +73,10 @@
       outline: none;
       border-color: #4285f4;
     }
+    .server-config input.error {
+      border-color: #ea4335;
+      background-color: #fef2f2;
+    }
     .server-config small {
       color: #888;
       display: block;
@@ -177,6 +181,10 @@
     then start casting in each tab.
   </div>
 
+  <div id="customAppIdNotice" class="disclaimer" style="display: none;">
+    <strong>Using custom App ID:</strong> <span id="customAppIdValue"></span>
+  </div>
+
   <div class="card">
     <div class="server-config">
       <label for="serverIp">Sendspin Server</label>
@@ -208,11 +216,18 @@
     <div id="status">Loading Cast SDK...</div>
   </div>
 
+  <div id="devFooter" style="display: none; margin-top: 20px; text-align: center;">
+    <a href="#" id="customizeAppId" style="color: #666; font-size: 12px;">Customize App ID</a>
+  </div>
+
   <script>
-    const APP_ID = '938CBF87';
+    const DEFAULT_APP_ID = '938CBF87';
     const CAST_NAMESPACE = 'urn:x-cast:sendspin';
     let castContext = null;
     let castSession = null;
+
+    // Check if running on localhost
+    const isLocalhost = ['localhost', '127.0.0.1', ''].includes(window.location.hostname);
 
     // Load saved settings from localStorage or URL query params
     const urlParams = new URLSearchParams(window.location.search);
@@ -229,6 +244,35 @@
     if (savedCodec) {
       document.getElementById('codec').value = savedCodec;
     }
+
+    // Get app ID from query param (localhost only) or use default
+    const appIdFromUrl = isLocalhost ? urlParams.get('appId') : null;
+    const APP_ID = appIdFromUrl || DEFAULT_APP_ID;
+
+    // Show custom app ID notice if using non-default
+    if (appIdFromUrl) {
+      document.getElementById('customAppIdNotice').style.display = 'block';
+      document.getElementById('customAppIdValue').textContent = appIdFromUrl;
+    }
+
+    // Show dev footer on localhost
+    if (isLocalhost) {
+      document.getElementById('devFooter').style.display = 'block';
+      document.getElementById('customizeAppId').addEventListener('click', (e) => {
+        e.preventDefault();
+        const newAppId = prompt('Enter custom Cast App ID:', APP_ID);
+        if (newAppId && newAppId.trim()) {
+          const url = new URL(window.location.href);
+          url.searchParams.set('appId', newAppId.trim());
+          window.location.href = url.toString();
+        }
+      });
+    }
+
+    // Clear error state when user types in server field
+    document.getElementById('serverIp').addEventListener('input', () => {
+      document.getElementById('serverIp').classList.remove('error');
+    });
 
     function getServerUrl() {
       const url = document.getElementById('serverIp').value.trim();
@@ -376,6 +420,9 @@
 
       const serverUrl = getServerUrl();
       if (!serverUrl) {
+        const serverInput = document.getElementById('serverIp');
+        serverInput.classList.add('error');
+        serverInput.focus();
         document.getElementById('status').textContent = 'Please enter server URL first';
         return;
       }
