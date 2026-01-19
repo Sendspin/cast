@@ -87,6 +87,15 @@ All messages between sender and receiver use the custom namespace `urn:x-cast:se
 | `sync` | object | Time sync info: `synced`, `offset` (ms), `error` (ms). |
 | `syncInfo` | object | Detailed sync metrics: `clockDriftPercent`, `syncErrorMs`, `resyncCount`. |
 
+## Development Setup
+
+To develop and test the Cast receiver, you need to set up a Cast developer account and register a custom receiver app.
+
+1. Go to the [Google Cast SDK Developer Console](https://cast.google.com/publish/#/overview) and sign in with your Google account.
+2. Create a new application and select "Custom Receiver".
+3. Set the receiver URL to a accessible URL where your dev server hosts the receiver (e.g., `http://<your-ip>:4173/receiver.html`).
+4. Note the Application ID assigned to your app.
+
 ## Development
 
 Run a dev server and hack on the receiver UI (requires network for Cast SDK):
