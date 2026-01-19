@@ -71,7 +71,10 @@ function sendStatusToSender(status: {
   muted?: boolean;
 }) {
   if (castContext) {
-    castContext.sendCustomMessage(CAST_NAMESPACE, undefined, status);
+    castContext.sendCustomMessage(CAST_NAMESPACE, undefined, {
+      type: "status",
+      ...status,
+    });
   }
 }
 
@@ -318,11 +321,18 @@ function tryInitCastReceiver(): boolean {
   // Listen for custom messages with server URL, player ID, name, and sync delay
   context.addCustomMessageListener(CAST_NAMESPACE, (event: any) => {
     console.log("Sendspin: Received message from sender:", event.data);
-    const serverUrl = event.data?.serverUrl;
-    const playerId = event.data?.playerId;
-    const playerName = event.data?.playerName;
-    const syncDelay = event.data?.syncDelay;
-    const codecs = event.data?.codecs;
+    if (!event.data) {
+      return;
+    }
+    const existingPlayer = (window as any).player as SendspinPlayer | undefined;
+
+    // type = "config"
+    const serverUrl = event.data.serverUrl;
+    const playerId = event.data.playerId;
+    const playerName = event.data.playerName;
+    const syncDelay = event.data.syncDelay;
+    const codecs = event.data.codecs;
+
     if (Array.isArray(codecs) && codecs.every(isCodec)) {
       providedCodecs = codecs;
       console.log("Sendspin: Using codecs from sender:", codecs);
@@ -342,27 +352,25 @@ function tryInitCastReceiver(): boolean {
       providedSyncDelay = syncDelay;
       console.log("Sendspin: Using sync delay from sender:", syncDelay, "ms");
       // Update existing player if already connected
-      const existingPlayer = (window as any).player as
-        | SendspinPlayer
-        | undefined;
       if (existingPlayer) {
         existingPlayer.setSyncDelay(syncDelay);
         console.log("Sendspin: Updated sync delay on existing player");
       }
     }
     // Check if codecs changed on an existing player - requires reconnect
-    const existingPlayer = (window as any).player as SendspinPlayer | undefined;
-    if (existingPlayer && currentPlayerCodecs && providedCodecs) {
-      const codecsChanged =
-        JSON.stringify(providedCodecs) !== JSON.stringify(currentPlayerCodecs);
-      if (codecsChanged) {
-        const targetUrl = serverUrl ?? currentServerUrl;
-        if (targetUrl) {
-          console.log("Sendspin: Codecs changed, reconnecting...");
-          connectToServer(targetUrl);
-        }
-        return;
+    if (
+      existingPlayer &&
+      currentPlayerCodecs &&
+      providedCodecs &&
+      // Check for actual changes in codecs
+      JSON.stringify(providedCodecs) !== JSON.stringify(currentPlayerCodecs)
+    ) {
+      const targetUrl = serverUrl ?? currentServerUrl;
+      if (targetUrl) {
+        console.log("Sendspin: Codecs changed, reconnecting...");
+        connectToServer(targetUrl);
       }
+      return;
     }
 
     if (serverUrl && serverUrl !== currentServerUrl) {

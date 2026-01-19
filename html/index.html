@@ -348,7 +348,7 @@
               const codecs = getCodecs();
               if (serverUrl) {
                 updateStatus({ state: 'connecting', message: 'Starting receiver...' });
-                castSession.sendMessage(CAST_NAMESPACE, { serverUrl, syncDelay, codecs })
+                castSession.sendMessage(CAST_NAMESPACE, { type: 'config', serverUrl, syncDelay, codecs })
                   .catch((err) => {
                     updateStatus({ state: 'error', message: 'Failed to send config: ' + err });
                   });
@@ -395,7 +395,7 @@
     document.getElementById('syncDelay').addEventListener('input', () => {
       if (!castSession) return;
       const syncDelay = getSyncDelay();
-      castSession.sendMessage(CAST_NAMESPACE, { syncDelay })
+      castSession.sendMessage(CAST_NAMESPACE, { type: 'config', syncDelay })
         .then(() => console.log('Sent sync delay update:', syncDelay))
         .catch((err) => console.error('Failed to send sync delay:', err));
     });
