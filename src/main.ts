@@ -204,12 +204,12 @@ async function connectToServer(baseUrl: string) {
       updateDebug(newPlayer);
     },
   });
-  player = newPlayer;
 
   try {
     await newPlayer.connect();
     console.log("Sendspin: Connected - ready to play");
     window.setStatus?.("Ready to play");
+    player = newPlayer;
     sendStatusToSender({ state: "connected", message: "Ready to play" });
 
     // Track current connection settings for change detection (only on success)
