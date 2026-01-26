@@ -69,9 +69,6 @@ window.onunhandledrejection = (event) => {
 // Cast context for sending messages back to sender
 let castContext: any = null;
 
-// PlayerManager for handling media commands via Cast Play Control APIs
-let playerManager: any = null;
-
 let player: SendspinPlayer | undefined;
 
 // Get hardware volume from Cast system (0-100 scale)
@@ -202,52 +199,6 @@ let currentPlayerState: {
   isPlaying: boolean;
 } = { isPlaying: false };
 
-// Update PlayerManager state for Cast media controls (Google Home, etc.)
-function updatePlayerManagerState(
-  metadata: ServerStateMetadata,
-  isPlaying: boolean,
-): void {
-  if (!playerManager || !window.cast) return;
-
-  const castFw = window.cast.framework;
-  const duration = metadata.progress?.track_duration
-    ? metadata.progress.track_duration / 1000
-    : 0;
-
-  const mediaInfo = {
-    contentId: "sendspin-stream",
-    contentType: "audio/pcm",
-    streamType:
-      duration > 0
-        ? castFw.messages.StreamType.BUFFERED
-        : castFw.messages.StreamType.LIVE,
-    duration,
-    metadata: {
-      metadataType: castFw.messages.MetadataType.MUSIC_TRACK,
-      title: metadata.title ?? "Unknown",
-      artist: metadata.artist ?? "",
-      albumName: metadata.album ?? "",
-      images: metadata.artwork_url ? [{ url: metadata.artwork_url }] : [],
-    },
-  };
-
-  // Set supported commands so Google Home shows play/pause/skip controls
-  const supportedCommands =
-    castFw.messages.Command.PAUSE |
-    castFw.messages.Command.QUEUE_NEXT |
-    castFw.messages.Command.QUEUE_PREV;
-  playerManager.setSupportedMediaCommands(supportedCommands);
-
-  playerManager.setMediaInformation(mediaInfo, true);
-  playerManager.broadcastStatus(true);
-}
-
-// Clear PlayerManager state when not playing
-function clearPlayerManagerState(): void {
-  if (!playerManager) return;
-  playerManager.broadcastStatus(true);
-}
-
 // Connect to Sendspin server
 async function connectToServer(baseUrl: string) {
   // Cleanup existing player and intervals before creating new one
@@ -309,12 +260,11 @@ async function connectToServer(baseUrl: string) {
       // Update volume display
       window.setVolume?.(hwVol.volume / 100);
 
-      // Update now playing UI and Cast PlayerManager
+      // Update now playing UI
       if (state.serverState.metadata) {
         window.setNowPlaying?.(
           toNowPlayingMetadata(state.serverState.metadata),
         );
-        updatePlayerManagerState(state.serverState.metadata, state.isPlaying);
 
         // Start progress interval if not running
         if (!progressIntervalId) {
@@ -329,7 +279,6 @@ async function connectToServer(baseUrl: string) {
           clearInterval(progressIntervalId);
           progressIntervalId = null;
         }
-        clearPlayerManagerState();
       }
 
       sendPlayerStatus(newPlayer);
@@ -391,93 +340,6 @@ function tryInitCastReceiver(): boolean {
 
   // Store context for sending messages back to sender
   castContext = context;
-
-  // Get PlayerManager for handling media commands (Google Home controls)
-  playerManager = context.getPlayerManager();
-
-  // Set up message interceptors for media commands
-  if (playerManager) {
-    // PLAY: Forward to Sendspin server
-    playerManager.setMessageInterceptor(
-      castFramework.messages.MessageType.PLAY,
-      (requestData: any) => {
-        console.log("Sendspin: PLAY command received");
-        player?.sendCommand("play", undefined as never);
-        return requestData;
-      },
-    );
-
-    // PAUSE: Forward to Sendspin server
-    playerManager.setMessageInterceptor(
-      castFramework.messages.MessageType.PAUSE,
-      (requestData: any) => {
-        console.log("Sendspin: PAUSE command received");
-        player?.sendCommand("pause", undefined as never);
-        return requestData;
-      },
-    );
-
-    // STOP: Forward as pause
-    playerManager.setMessageInterceptor(
-      castFramework.messages.MessageType.STOP,
-      (requestData: any) => {
-        console.log("Sendspin: STOP command received");
-        player?.sendCommand("pause", undefined as never);
-        return requestData;
-      },
-    );
-
-    // QUEUE_UPDATE: Handle next/previous (QUEUE_NEXT/QUEUE_PREV map to this)
-    playerManager.setMessageInterceptor(
-      castFramework.messages.MessageType.QUEUE_UPDATE,
-      (requestData: any) => {
-        if (requestData.jump === 1) {
-          console.log("Sendspin: NEXT command received");
-          player?.sendCommand("next", undefined as never);
-        } else if (requestData.jump === -1) {
-          console.log("Sendspin: PREVIOUS command received");
-          player?.sendCommand("previous", undefined as never);
-        }
-        return requestData;
-      },
-    );
-
-    // Override playerState in MEDIA_STATUS before it's sent (WebAudio doesn't update this automatically)
-    playerManager.setMessageInterceptor(
-      castFramework.messages.MessageType.MEDIA_STATUS,
-      (status: any) => {
-        if (status) {
-          status.playerState = currentPlayerState.isPlaying
-            ? castFramework.messages.PlayerState.PLAYING
-            : castFramework.messages.PlayerState.PAUSED;
-        }
-        return status;
-      },
-    );
-  }
-
-  // Handle remote control keys (OK for play/pause, left/right for skip)
-  document.addEventListener("keydown", (event) => {
-    switch (event.key) {
-      case "Enter": // OK button
-      case " ": // Space bar (for testing)
-        console.log("Sendspin: Play/Pause key pressed");
-        if (currentPlayerState.isPlaying) {
-          player?.sendCommand("pause", undefined as never);
-        } else {
-          player?.sendCommand("play", undefined as never);
-        }
-        break;
-      case "ArrowLeft":
-        console.log("Sendspin: Previous key pressed");
-        player?.sendCommand("previous", undefined as never);
-        break;
-      case "ArrowRight":
-        console.log("Sendspin: Next key pressed");
-        player?.sendCommand("next", undefined as never);
-        break;
-    }
-  });
 
   console.log("Sendspin: Initializing Cast Receiver...");
   window.setStatus?.("Waiting for sender...");
