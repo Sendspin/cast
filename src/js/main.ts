@@ -3,6 +3,13 @@ import {
   ServerStateMetadata,
 } from "@music-assistant/sendspin-js";
 
+// Manual type - @types/chromecast-caf-receiver is missing volume methods
+// Matches cast.framework.system.SystemVolumeData from the actual SDK
+interface SystemVolumeData {
+  level: number;
+  muted: boolean;
+}
+
 interface NowPlayingMetadata {
   title?: string;
   artist?: string;
@@ -13,11 +20,12 @@ interface NowPlayingMetadata {
 declare global {
   interface Window {
     setStatus?: (text: string) => void;
+    setPlaybackState?: (isPlaying: boolean) => void;
     setDebug?: (text: string) => void;
     setNowPlaying?: (metadata: NowPlayingMetadata | null) => void;
-    setVolume?: (level: number) => void;
+    setVolume?: (level: number, muted: boolean) => void;
     setProgress?: (currentSeconds: number, totalSeconds: number) => void;
-    cast?: any;
+    showError?: (context: string, error: unknown) => void;
   }
 }
 
@@ -59,15 +67,23 @@ function isCodec(value: unknown): value is Codec {
 window.onerror = (message, source, lineno, colno, error) => {
   const fullError =
     error || new Error(`${message} at ${source}:${lineno}:${colno}`);
-  (window as any).showError?.("JavaScript Error", fullError);
+  window.showError?.("JavaScript Error", fullError);
   return false;
 };
 window.onunhandledrejection = (event) => {
-  (window as any).showError?.("Unhandled Promise Rejection", event.reason);
+  window.showError?.("Unhandled Promise Rejection", event.reason);
 };
 
-// Cast context for sending messages back to sender
-let castContext: any = null;
+// Cast context type - extends SDK type with volume methods missing from @types
+type CastReceiverContext = ReturnType<
+  typeof cast.framework.CastReceiverContext.getInstance
+> & {
+  // These methods exist in SDK but are missing from @types/chromecast-caf-receiver
+  getSystemVolume(): SystemVolumeData | null;
+  setSystemVolumeLevel(level: number): void;
+  setSystemVolumeMuted(muted: boolean): void;
+};
+let castContext: CastReceiverContext | null = null;
 
 let player: SendspinPlayer | undefined;
 
@@ -250,15 +266,12 @@ async function connectToServer(baseUrl: string) {
       };
       const hwVol = getHardwareVolume();
 
-      // Update status
-      if (state.isPlaying) {
-        window.setStatus?.("Playing");
-      } else {
-        window.setStatus?.("Paused");
-      }
+      // Update status and playback state
+      window.setStatus?.(state.isPlaying ? "Playing" : "Paused");
+      window.setPlaybackState?.(state.isPlaying);
 
-      // Update volume display
-      window.setVolume?.(hwVol.volume / 100);
+      // Update volume display (including muted state)
+      window.setVolume?.(hwVol.volume / 100, hwVol.muted);
 
       // Update now playing UI
       if (state.serverState.metadata) {
@@ -331,7 +344,9 @@ function tryInitCastReceiver(): boolean {
     return true;
   }
 
-  const castFramework = window.cast?.framework;
+  // cast is a global from the Cast SDK script - check if loaded
+  const castFramework =
+    typeof cast !== "undefined" ? cast.framework : undefined;
   const context = castFramework?.CastReceiverContext?.getInstance();
   if (!castFramework || !context) {
     return false;
@@ -339,7 +354,8 @@ function tryInitCastReceiver(): boolean {
   receiverStarted = true;
 
   // Store context for sending messages back to sender
-  castContext = context;
+  // Cast to our extended type (SDK has methods missing from @types)
+  castContext = context as CastReceiverContext;
 
   console.log("Sendspin: Initializing Cast Receiver...");
   window.setStatus?.("Waiting for sender...");
@@ -347,10 +363,11 @@ function tryInitCastReceiver(): boolean {
   // Listen for system (hardware) volume changes
   context.addEventListener(
     castFramework.system.EventType.SYSTEM_VOLUME_CHANGED,
-    (event: any) => {
-      console.log("Sendspin: System volume changed:", event.data);
+    (event) => {
+      const volumeData = event.data as SystemVolumeData;
+      console.log("Sendspin: System volume changed:", volumeData);
       const hwVol = getHardwareVolume();
-      window.setVolume?.(hwVol.volume / 100);
+      window.setVolume?.(hwVol.volume / 100, hwVol.muted);
       window.setStatus?.(currentPlayerState.isPlaying ? "Playing" : "Paused");
       // Send volume update to sender
       if (player) {
@@ -386,15 +403,12 @@ function tryInitCastReceiver(): boolean {
     },
   );
 
-  context.addEventListener(
-    castFramework.system.EventType.ERROR,
-    (event: any) => {
-      console.error("Sendspin: Cast error:", event);
-    },
-  );
+  context.addEventListener(castFramework.system.EventType.ERROR, (event) => {
+    console.error("Sendspin: Cast error:", event);
+  });
 
   // Listen for custom messages with server URL, player ID, name, and sync delay
-  context.addCustomMessageListener(CAST_NAMESPACE, (event: any) => {
+  context.addCustomMessageListener(CAST_NAMESPACE, (event) => {
     console.log("Sendspin: Received message from sender:", event.data);
     if (!event.data) {
       return;

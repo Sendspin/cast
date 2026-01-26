@@ -465,13 +465,14 @@
         );
       };
 
-      window.setStatus = function (text) {
-        // Update idle status text
-        idleStatus.textContent = text;
+      window.setPlaybackState = function (isPlaying) {
+        // Update playback icon based on playing state
+        window.setPlaybackIcon(isPlaying);
+      };
 
-        // Update playback icon based on paused state
-        var isPaused = text && text.toLowerCase().includes("paused");
-        window.setPlaybackIcon(!isPaused);
+      window.setStatus = function (text) {
+        // Update idle status text only
+        idleStatus.textContent = text;
       };
 
       window.setDebug = function (text) {
@@ -514,11 +515,17 @@
         }
       };
 
-      window.setVolume = function (level) {
-        // level is 0-1
+      window.setVolume = function (level, muted) {
+        // level is 0-1, muted is boolean
         var percent = Math.round(level * 100);
         volumeFill.style.width = percent + "%";
-        volumePercent.textContent = percent + "%";
+        if (muted) {
+          volumePercent.textContent = "Muted";
+          volumeFill.style.opacity = "0.3";
+        } else {
+          volumePercent.textContent = percent + "%";
+          volumeFill.style.opacity = "1";
+        }
       };
 
       window.setProgress = function (currentSeconds, totalSeconds) {
