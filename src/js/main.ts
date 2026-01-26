@@ -75,21 +75,23 @@ window.onunhandledrejection = (event) => {
 };
 
 // Cast context type - extends SDK type with volume methods missing from @types
+// Methods are optional as they may not exist on all Cast devices/SDK versions
 type CastReceiverContext = ReturnType<
   typeof cast.framework.CastReceiverContext.getInstance
 > & {
   // These methods exist in SDK but are missing from @types/chromecast-caf-receiver
-  getSystemVolume(): SystemVolumeData | null;
-  setSystemVolumeLevel(level: number): void;
-  setSystemVolumeMuted(muted: boolean): void;
+  getSystemVolume?(): SystemVolumeData | null;
+  setSystemVolumeLevel?(level: number): void;
+  setSystemVolumeMuted?(muted: boolean): void;
 };
 let castContext: CastReceiverContext | null = null;
 
 let player: SendspinPlayer | undefined;
 
 // Get hardware volume from Cast system (0-100 scale)
+// Falls back to default if method unavailable on device
 function getHardwareVolume(): { volume: number; muted: boolean } {
-  if (castContext) {
+  if (castContext?.getSystemVolume) {
     const systemVolume = castContext.getSystemVolume();
     if (systemVolume) {
       return {
@@ -102,13 +104,18 @@ function getHardwareVolume(): { volume: number; muted: boolean } {
 }
 
 // Set hardware volume via Cast system
+// Silently no-ops if methods unavailable on device
 function setHardwareVolume(volume: number, muted: boolean): void {
-  if (castContext) {
-    // Cast API uses 0.0-1.0 for volume level
+  if (!castContext) return;
+
+  // Cast API uses 0.0-1.0 for volume level
+  if (castContext.setSystemVolumeLevel) {
     castContext.setSystemVolumeLevel(volume / 100);
-    castContext.setSystemVolumeMuted(muted);
-    console.log("Sendspin: Set hardware volume:", volume, "muted:", muted);
   }
+  if (castContext.setSystemVolumeMuted) {
+    castContext.setSystemVolumeMuted(muted);
+  }
+  console.log("Sendspin: Set hardware volume:", volume, "muted:", muted);
 }
 
 // Send status update to sender
