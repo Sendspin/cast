@@ -6,48 +6,527 @@
     <title>Sendspin over Cast</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
-      body {
-        background: #121212;
-        color: #fff;
-        font-family: "Google Sans", "Roboto", sans-serif;
+      :root {
+        --spacing-sm: 8px;
+        --spacing-md: 14px;
+        --spacing-lg: 24px;
+        --spacing-xl: 48px;
+        --top-bar-height: 56px;
+        --icon-size: 24px;
+        --bar-thickness: 5px;
+        --text-muted: rgba(255, 255, 255, 0.45);
+        --text-secondary: rgba(255, 255, 255, 0.5);
+        --text-primary: rgba(255, 255, 255, 1);
+        --bar-bg: rgba(255, 255, 255, 0.2);
+        --bar-fill: rgba(255, 255, 255, 0.7);
+      }
+
+      * {
         margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          "Google Sans",
+          Roboto,
+          -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+        color: var(--text-primary);
         height: 100vh;
+        overflow: hidden;
+        display: grid;
+        grid-template-rows: var(--top-bar-height) 1fr auto;
+        background: #121212;
+      }
+
+      .background {
+        position: fixed;
+        inset: -50px;
+        background-size: cover;
+        background-position: center;
+        filter: blur(80px) saturate(1.2) brightness(0.35);
+        transform: scale(1.2);
+        z-index: -1;
+        display: none;
+      }
+
+      .top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 var(--spacing-lg);
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(10px);
+        z-index: 10;
+      }
+
+      .debug-line {
+        font-size: 13px;
+        font-family: "SF Mono", Monaco, "Courier New", monospace;
+        color: var(--text-secondary);
+        letter-spacing: 0.3px;
+      }
+
+      .branding {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+      }
+
+      .main-content {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--spacing-lg);
+        padding: var(--spacing-xl);
+        padding-bottom: 0;
+        min-height: 0;
+      }
+
+      .track-section {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        min-width: 0;
+      }
+
+      .artwork-section {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .artwork-large {
+        width: 100%;
+        max-width: min(100%, calc(100vh - var(--top-bar-height) - 200px));
+        max-height: calc(100vh - var(--top-bar-height) - 200px);
+        aspect-ratio: 1;
+        border-radius: 16px;
+        box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.6);
+        object-fit: cover;
+        display: none;
+      }
+
+      .progress-section {
+        padding: var(--spacing-lg) var(--spacing-xl) var(--spacing-lg)
+          calc(var(--spacing-xl) + var(--icon-size) + var(--spacing-md));
+      }
+
+      .progress-row {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--spacing-md);
+      }
+
+      .playback-icon {
+        margin-left: calc(-1 * (var(--icon-size) + var(--spacing-md)));
+        margin-top: calc((var(--bar-thickness) - var(--icon-size)) / 2);
+        width: var(--icon-size);
+        height: var(--icon-size);
+        opacity: 0.6;
+        flex-shrink: 0;
+      }
+
+      .progress-container {
+        flex: 1;
+      }
+
+      .track-title {
+        font-size: clamp(32px, 5vw, 64px);
+        font-weight: 600;
+        letter-spacing: -1px;
+        line-height: 1.1;
+        margin-bottom: var(--spacing-md);
+      }
+
+      .metadata-row {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-md);
+      }
+
+      .metadata-row + .metadata-row {
+        margin-top: 6px;
+      }
+
+      .metadata-icon {
+        width: var(--icon-size);
+        height: var(--icon-size);
+        opacity: 0.6;
+        flex-shrink: 0;
+      }
+
+      .track-album,
+      .track-artist {
+        font-size: 18px;
+        font-weight: 400;
+        color: var(--text-muted);
+      }
+
+      .volume-row {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-md);
+        margin-top: var(--spacing-lg);
+      }
+
+      .volume-bar {
+        width: 120px;
+        height: var(--bar-thickness);
+        background: var(--bar-bg);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+
+      .volume-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--bar-fill);
+        border-radius: 3px;
+      }
+
+      .volume-percent {
+        font-size: 16px;
+        color: var(--text-secondary);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .progress-track {
+        height: var(--bar-thickness);
+        background: var(--bar-bg);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+
+      .progress-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--bar-fill);
+        border-radius: 3px;
+        transition: width 0.1s linear;
+      }
+
+      .progress-time {
+        display: flex;
+        justify-content: space-between;
+        margin-top: var(--spacing-sm);
+        font-size: 16px;
+        color: var(--text-secondary);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Idle state - no metadata */
+      .idle-container {
+        position: absolute;
+        inset: 0;
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
+        z-index: 5;
       }
-      #title {
+
+      .idle-title {
         font-size: 48px;
         font-weight: 300;
         margin-bottom: 16px;
         opacity: 0.9;
       }
-      #status {
+
+      .idle-status {
         font-size: 24px;
         opacity: 0.6;
       }
-      #debug {
+
+      /* Hide playing UI when idle */
+      .main-content.hidden,
+      .progress-section.hidden {
+        display: none;
+      }
+
+      /* Full-screen error overlay */
+      .error-overlay {
+        display: none;
         position: fixed;
-        bottom: 20px;
-        left: 20px;
+        inset: 0;
+        background: rgba(30, 30, 40, 0.98);
+        z-index: 1000;
+        padding: 40px;
+        overflow: auto;
+      }
+
+      .error-overlay.visible {
+        display: block;
+      }
+
+      .error-title {
+        font-size: 36px;
+        font-weight: 500;
+        color: #fff;
+        margin-bottom: 24px;
+      }
+
+      .error-section {
+        margin-bottom: 24px;
+      }
+
+      .error-label {
         font-size: 14px;
-        font-family: monospace;
-        opacity: 0.4;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.6);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
+      }
+
+      .error-content {
+        font-family: "SF Mono", Monaco, "Courier New", monospace;
+        font-size: 16px;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.3);
+        padding: 16px;
+        border-radius: 8px;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+
+      .error-stack {
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.8);
+        line-height: 1.6;
+      }
+
+      .error-meta {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.5);
+        margin-top: 24px;
       }
     </style>
   </head>
   <body>
-    <div id="title">Sendspin</div>
-    <div id="status">Ready to play</div>
-    <div id="debug"></div>
+    <!-- Full-screen error overlay -->
+    <div class="error-overlay" id="error-overlay">
+      <div class="error-title">Oops, something went wrong</div>
+      <div class="error-section">
+        <div class="error-label">Context</div>
+        <div class="error-content" id="error-context">-</div>
+      </div>
+      <div class="error-section">
+        <div class="error-label">Message</div>
+        <div class="error-content" id="error-message">-</div>
+      </div>
+      <div class="error-section">
+        <div class="error-label">Stack Trace</div>
+        <div class="error-content error-stack" id="error-stack">-</div>
+      </div>
+      <div class="error-meta" id="error-meta">-</div>
+    </div>
+
+    <div class="background" id="background"></div>
+
+    <div class="top-bar">
+      <div class="debug-line" id="debug"></div>
+      <div class="branding">Sendspin</div>
+    </div>
+
+    <!-- Idle state -->
+    <div class="idle-container" id="idle-container">
+      <div class="idle-title">Sendspin</div>
+      <div class="idle-status" id="idle-status">Ready to play</div>
+    </div>
+
+    <!-- Playing state -->
+    <main class="main-content hidden" id="main-content">
+      <section class="track-section">
+        <div class="track-info">
+          <h1 class="track-title" id="track-title">-</h1>
+          <div class="metadata-row" id="album-row">
+            <svg class="metadata-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"
+              />
+            </svg>
+            <span class="track-album" id="track-album"></span>
+          </div>
+          <div class="metadata-row">
+            <svg class="metadata-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"
+              />
+            </svg>
+            <span class="track-artist" id="track-artist">-</span>
+          </div>
+          <div class="volume-row" id="volume-row">
+            <svg class="metadata-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"
+              />
+            </svg>
+            <div class="volume-bar">
+              <div class="volume-fill" id="volume-fill"></div>
+            </div>
+            <span class="volume-percent" id="volume-percent">-</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="artwork-section">
+        <img class="artwork-large" id="artwork" alt="Album art" />
+      </section>
+    </main>
+
+    <footer class="progress-section hidden" id="progress-section">
+      <div class="progress-row">
+        <svg
+          class="playback-icon"
+          id="playback-icon"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+        >
+          <path id="playback-path" d="M8 5v14l11-7z" />
+        </svg>
+        <div class="progress-container">
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <div class="progress-time">
+            <span id="current-time">0:00</span>
+            <span id="total-time">0:00</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+
     <script>
       // UI helpers - exposed globally for main.ts
-      window.setStatus = function (text) {
-        document.getElementById("status").textContent = text;
+      var idleContainer = document.getElementById("idle-container");
+      var idleStatus = document.getElementById("idle-status");
+      var mainContent = document.getElementById("main-content");
+      var progressSection = document.getElementById("progress-section");
+      var background = document.getElementById("background");
+
+      // Error overlay elements
+      var errorOverlay = document.getElementById("error-overlay");
+      var errorContext = document.getElementById("error-context");
+      var errorMessage = document.getElementById("error-message");
+      var errorStack = document.getElementById("error-stack");
+      var errorMeta = document.getElementById("error-meta");
+
+      // Show full-screen error for debugging
+      window.showError = function (context, error) {
+        var msg = error instanceof Error ? error.message : String(error);
+        var stack =
+          error instanceof Error && error.stack
+            ? error.stack
+            : "No stack trace";
+        var timestamp = new Date().toISOString();
+        var ua = navigator.userAgent;
+
+        errorContext.textContent = context;
+        errorMessage.textContent = msg;
+        errorStack.textContent = stack;
+        errorMeta.textContent = "Time: " + timestamp + "\nUA: " + ua;
+        errorOverlay.classList.add("visible");
+
+        console.error("Sendspin Error [" + context + "]:", error);
       };
+      var artwork = document.getElementById("artwork");
+      var trackTitle = document.getElementById("track-title");
+      var trackArtist = document.getElementById("track-artist");
+      var trackAlbum = document.getElementById("track-album");
+      var albumRow = document.getElementById("album-row");
+      var volumeFill = document.getElementById("volume-fill");
+      var volumePercent = document.getElementById("volume-percent");
+      var progressFill = document.getElementById("progress-fill");
+      var currentTime = document.getElementById("current-time");
+      var totalTime = document.getElementById("total-time");
+      var playbackPath = document.getElementById("playback-path");
+
+      // SVG paths for play/pause icons
+      var playIconPath = "M8 5v14l11-7z";
+      var pauseIconPath = "M6 19h4V5H6v14zm8-14v14h4V5h-4z";
+
+      function formatTime(seconds) {
+        if (!seconds || seconds < 0) return "0:00";
+        var mins = Math.floor(seconds / 60);
+        var secs = Math.floor(seconds % 60);
+        return mins + ":" + (secs < 10 ? "0" : "") + secs;
+      }
+
+      window.setPlaybackIcon = function (isPlaying) {
+        // Show pause icon when playing, play icon when paused (standard convention)
+        playbackPath.setAttribute(
+          "d",
+          isPlaying ? pauseIconPath : playIconPath,
+        );
+      };
+
+      window.setStatus = function (text) {
+        // Update idle status text
+        idleStatus.textContent = text;
+
+        // Update playback icon based on paused state
+        var isPaused = text && text.toLowerCase().includes("paused");
+        window.setPlaybackIcon(!isPaused);
+      };
+
       window.setDebug = function (text) {
         document.getElementById("debug").textContent = text;
+      };
+
+      window.setNowPlaying = function (metadata) {
+        if (!metadata) {
+          // Show idle state, hide playing state
+          idleContainer.style.display = "flex";
+          mainContent.classList.add("hidden");
+          progressSection.classList.add("hidden");
+          background.style.display = "none";
+          return;
+        }
+
+        // Hide idle state, show playing state
+        idleContainer.style.display = "none";
+        mainContent.classList.remove("hidden");
+        progressSection.classList.remove("hidden");
+
+        // Update track info
+        trackTitle.textContent = metadata.title || "-";
+        trackArtist.textContent = metadata.artist || "-";
+        trackAlbum.textContent = metadata.album || "";
+
+        // Hide album row if no album
+        albumRow.style.display = metadata.album ? "flex" : "none";
+
+        // Update artwork and background
+        if (metadata.artworkUrl) {
+          artwork.src = metadata.artworkUrl;
+          artwork.style.display = "block";
+          background.style.backgroundImage =
+            "url('" + metadata.artworkUrl + "')";
+          background.style.display = "block";
+        } else {
+          artwork.style.display = "none";
+          background.style.display = "none";
+        }
+      };
+
+      window.setVolume = function (level) {
+        // level is 0-1
+        var percent = Math.round(level * 100);
+        volumeFill.style.width = percent + "%";
+        volumePercent.textContent = percent + "%";
+      };
+
+      window.setProgress = function (currentSeconds, totalSeconds) {
+        var percent =
+          totalSeconds > 0 ? (currentSeconds / totalSeconds) * 100 : 0;
+        progressFill.style.width = percent + "%";
+        currentTime.textContent = formatTime(currentSeconds);
+        totalTime.textContent = formatTime(totalSeconds);
       };
     </script>
     <script type="module" src="./js/main.ts"></script>

@@ -183,10 +183,10 @@
   resolved "https://registry.yarnpkg.com/@humanwhocodes/object-schema/-/object-schema-2.0.3.tgz#4a2868d75d6d6963e423bcf90b7fd1be343409d3"
   integrity sha512-93zYdMES/c1D69yZiKDBj0V24vqNzB/koF26KPaagAfd3P/4gUlh3Dys5ogAK+Exi9QyzlD8x/08Zt7wIKcDcA==
 
-"@music-assistant/sendspin-js@1.0.1":
-  version "1.0.1"
-  resolved "https://registry.yarnpkg.com/@music-assistant/sendspin-js/-/sendspin-js-1.0.1.tgz#fafdb2119529cdd14832b6cba24274f878d5d907"
-  integrity sha512-4vhx7DYyWsVI/OUN2RwMHnBhJT/c+tDnzbp/MJS20jE/4NDZArZi4T4RiBdhjfE75wrQf2k7FwXSd1Wj7aclOQ==
+"@music-assistant/sendspin-js@^2.0.0":
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/@music-assistant/sendspin-js/-/sendspin-js-2.0.0.tgz#23eb9bfb9f420ae22273fef0009a171924198710"
+  integrity sha512-yx9czSCUx5E95rXJJ5qtfShr3E6rcLm+c/Iv/sCWmaDHtAyxYrOnWnbqaQvpWydnQfaUKORo7PQaMXC1YeQr3w==
   dependencies:
     opus-encdec "^0.1.1"
 
@@ -325,6 +325,11 @@
   version "4.53.3"
   resolved "https://registry.yarnpkg.com/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.53.3.tgz#38ae84f4c04226c1d56a3b17296ef1e0460ecdfe"
   integrity sha512-UhTd8u31dXadv0MopwGgNOBpUVROFKWVQgAg5N1ESyCz8AuBcMqm4AuTjrwgQKGDfoFuz02EuMRHQIw/frmYKQ==
+
+"@types/chromecast-caf-receiver@^6.0.25":
+  version "6.0.25"
+  resolved "https://registry.yarnpkg.com/@types/chromecast-caf-receiver/-/chromecast-caf-receiver-6.0.25.tgz#432a82c96c96306f065f76d6a64cd3028e2b1f3f"
+  integrity sha512-76M/NBSEK+2Lc5FCzeUQYnGtn0wK+aBgDjT4JFKhpAOACeM/eoSnKMuND3SQ/ND1vcGgCc6QauNEfXozQOq7Lg==
 
 "@types/estree@1.0.8":
   version "1.0.8"
