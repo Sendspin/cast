@@ -13,7 +13,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@music-assistant/sendspin-js": "1.0.1"
+    "@music-assistant/sendspin-js": "2.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.0.10",
