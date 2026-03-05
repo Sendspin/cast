@@ -1,4 +1,4 @@
-import { SendspinPlayer } from "@music-assistant/sendspin-js";
+import { SendspinPlayer } from "@sendspin/sendspin-js";
 
 declare global {
   interface Window {
