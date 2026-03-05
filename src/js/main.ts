@@ -1,7 +1,4 @@
-import {
-  SendspinPlayer,
-  ServerStateMetadata,
-} from "@music-assistant/sendspin-js";
+import { SendspinPlayer, ServerStateMetadata } from "@sendspin/sendspin-js";
 
 // Manual type - @types/chromecast-caf-receiver is missing volume methods
 // Matches cast.framework.system.SystemVolumeData from the actual SDK
