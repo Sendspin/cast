@@ -361,6 +361,29 @@ function tryInitCastReceiver(): boolean {
   // Cast to our extended type (SDK has methods missing from @types)
   castContext = context as CastReceiverContext;
 
+  // Handle remote control keys (OK for play/pause, left/right for skip)
+  document.addEventListener("keydown", (event) => {
+    switch (event.key) {
+      case "Enter": // OK button
+      case " ": // Space bar (for testing)
+        console.log("Sendspin: Play/Pause key pressed");
+        if (currentPlayerState.isPlaying) {
+          player?.sendCommand("pause", undefined as never);
+        } else {
+          player?.sendCommand("play", undefined as never);
+        }
+        break;
+      case "ArrowLeft":
+        console.log("Sendspin: Previous key pressed");
+        player?.sendCommand("previous", undefined as never);
+        break;
+      case "ArrowRight":
+        console.log("Sendspin: Next key pressed");
+        player?.sendCommand("next", undefined as never);
+        break;
+    }
+  });
+
   console.log("Sendspin: Initializing Cast Receiver...");
   window.setStatus?.("Waiting for sender...");
 
