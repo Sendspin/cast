@@ -92,6 +92,16 @@ All messages between sender and receiver use the custom namespace `urn:x-cast:se
 | `sync`     | object  | Time sync info: `synced`, `offset` (ms), `error` (ms).                      |
 | `syncInfo` | object  | Detailed sync metrics: `clockDriftPercent`, `syncErrorMs`, `resyncCount`.   |
 
+### Error Handling
+
+- Fatal errors send `state: "error"` with a human-readable message (including cause), then close the Cast app after ~1s.
+- Fatal examples:
+  - Unhandled JavaScript/runtime issues, such as `TypeError: Cannot read properties of undefined` and unhandled promise rejections like `NotSupportedError: Failed to construct 'AudioContext'`
+  - Cast framework `ERROR` events
+  - Setup capability failures, such as `"AudioContext is not implemented on this device"`
+  - Reconnect exhaustion, such as `"Reconnect limit reached"`
+- Non-fatal example: normal server connection failures (`Connection failed`) report `state: "error"` but do not immediately close the app.
+
 ## Development Setup
 
 To develop and test the Cast receiver, you need to set up a Cast developer account and register a custom receiver app.
