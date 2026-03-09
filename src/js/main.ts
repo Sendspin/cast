@@ -162,6 +162,8 @@ let lastKnownConnected = false;
 let reconnectAttempt = 0;
 let reconnectTimerId: ReturnType<typeof setTimeout> | null = null;
 let isReconnectInProgress = false;
+// Monotonic token: only the latest connect attempt may finalize state.
+let connectGeneration = 0;
 
 function clearReconnectTimer() {
   if (reconnectTimerId !== null) {
@@ -193,6 +195,8 @@ function getReconnectDelayMs(attempt: number): number {
 }
 
 function stopCastAppAfterReconnectExhausted() {
+  connectGeneration += 1;
+
   const message = "Reconnect limit reached; stopping cast app.";
   console.error("Sendspin:", message);
   window.setStatus?.(message);
@@ -285,6 +289,9 @@ async function connectToServer(
   baseUrl: string,
   options: { fromReconnect?: boolean } = {},
 ): Promise<boolean> {
+  // Claim connect ownership for this invocation.
+  const generation = ++connectGeneration;
+
   if (!options.fromReconnect) {
     resetReconnectState();
   }
@@ -369,6 +376,11 @@ async function connectToServer(
 
   try {
     await newPlayer.connect();
+    if (generation !== connectGeneration) {
+      newPlayer.disconnect("another_server");
+      return true;
+    }
+
     console.log("Sendspin: Connected - ready to play");
     window.setStatus?.("Ready to play");
     player = newPlayer;
@@ -409,6 +421,10 @@ async function connectToServer(
     }, 1000);
     return true;
   } catch (error) {
+    if (generation !== connectGeneration) {
+      return true;
+    }
+
     console.error("Sendspin: Connection failed:", error);
     if (!options.fromReconnect) {
       window.setStatus?.("Connection failed");
