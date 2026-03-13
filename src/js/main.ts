@@ -144,6 +144,7 @@ function sendStatusToSender(status: {
 let providedPlayerId: string | null = null;
 let providedPlayerName: string | null = null;
 let providedCodecs: Codec[] | null = null;
+let providedStaticDelay: number = 0;
 
 // Track current connection settings (for detecting changes that require reconnect)
 let currentServerUrl: string | null = null;
@@ -323,7 +324,7 @@ async function connectToServer(
     clientName,
     correctionMode: "sync", // Explicit sync mode for multi-device playback
     storage: memoryStorage, // Cast doesn't support localStorage
-    syncDelay: 0, // Server sends actual delay via set_static_delay after connection
+    syncDelay: -providedStaticDelay,
     bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
     // Use codecs from sender config, default to PCM for maximum compatibility
     codecs: providedCodecs ?? DEFAULT_CODECS,
@@ -593,6 +594,17 @@ function tryInitCastReceiver(): boolean {
       // Store the player name provided by Music Assistant
       providedPlayerName = playerName;
       console.log("Sendspin: Using player name from sender:", playerName);
+    }
+    const staticDelay = event.data.staticDelay;
+    if (
+      typeof staticDelay === "number" &&
+      staticDelay >= 0 &&
+      staticDelay <= 5000
+    ) {
+      providedStaticDelay = staticDelay;
+      if (player) {
+        player.setSyncDelay(-staticDelay);
+      }
     }
     // Check if codecs changed on an existing player - requires reconnect
     if (
