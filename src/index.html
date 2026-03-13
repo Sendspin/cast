@@ -227,21 +227,6 @@
       </div>
 
       <div class="server-config" style="margin-top: 16px">
-        <label for="syncDelay">Sync Delay (ms)</label>
-        <input
-          type="number"
-          id="syncDelay"
-          placeholder="0"
-          value="0"
-          style="width: 100px"
-        />
-        <small
-          >Positive delays playback, negative advances it. Changes apply
-          instantly.</small
-        >
-      </div>
-
-      <div class="server-config" style="margin-top: 16px">
         <label for="codec">Audio Codec</label>
         <select
           id="codec"
@@ -302,10 +287,6 @@
       if (savedIp) {
         document.getElementById("serverIp").value = savedIp;
       }
-      const savedSyncDelay = localStorage.getItem("sendspin_sync_delay");
-      if (savedSyncDelay) {
-        document.getElementById("syncDelay").value = savedSyncDelay;
-      }
       const savedCodec = localStorage.getItem("sendspin_codec");
       if (savedCodec) {
         document.getElementById("codec").value = savedCodec;
@@ -347,13 +328,6 @@
         if (!url) return null;
         localStorage.setItem("sendspin_server_ip", url);
         return url;
-      }
-
-      function getSyncDelay() {
-        const delay =
-          parseInt(document.getElementById("syncDelay").value, 10) || 0;
-        localStorage.setItem("sendspin_sync_delay", delay.toString());
-        return delay;
       }
 
       function getCodecs() {
@@ -462,7 +436,6 @@
 
                 // Send server URL and config to receiver
                 const serverUrl = getServerUrl();
-                const syncDelay = getSyncDelay();
                 const codecs = getCodecs();
                 if (serverUrl) {
                   updateStatus({
@@ -473,7 +446,6 @@
                     .sendMessage(CAST_NAMESPACE, {
                       type: "config",
                       serverUrl,
-                      syncDelay,
                       codecs,
                     })
                     .catch((err) => {
@@ -528,16 +500,6 @@
           castSession.endSession(true);
         }
       }
-
-      // Live update sync delay when changed during active session
-      document.getElementById("syncDelay").addEventListener("input", () => {
-        if (!castSession) return;
-        const syncDelay = getSyncDelay();
-        castSession
-          .sendMessage(CAST_NAMESPACE, { type: "config", syncDelay })
-          .then(() => console.log("Sent sync delay update:", syncDelay))
-          .catch((err) => console.error("Failed to send sync delay:", err));
-      });
     </script>
   </body>
 </html>

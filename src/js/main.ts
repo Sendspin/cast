@@ -140,10 +140,9 @@ function sendStatusToSender(status: {
   }
 }
 
-// Player ID, name, sync delay, and codecs provided by the sender (Music Assistant server)
+// Player ID, name, and codecs provided by the sender (Music Assistant server)
 let providedPlayerId: string | null = null;
 let providedPlayerName: string | null = null;
-let providedSyncDelay: number = 0;
 let providedCodecs: Codec[] | null = null;
 
 // Track current connection settings (for detecting changes that require reconnect)
@@ -318,15 +317,13 @@ async function connectToServer(
   // Use provided name or default
   const clientName = providedPlayerName || "Music Assistant Cast Receiver";
 
-  console.log("Sendspin: Using sync delay:", providedSyncDelay, "ms");
-
   const newPlayer = new SendspinPlayer({
     playerId,
     baseUrl,
     clientName,
     correctionMode: "sync", // Explicit sync mode for multi-device playback
     storage: memoryStorage, // Cast doesn't support localStorage
-    syncDelay: providedSyncDelay,
+    syncDelay: 0, // Server sends actual delay via set_static_delay after connection
     bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
     // Use codecs from sender config, default to PCM for maximum compatibility
     codecs: providedCodecs ?? DEFAULT_CODECS,
@@ -570,7 +567,7 @@ function tryInitCastReceiver(): boolean {
     console.error("Sendspin: Cast error:", event);
   });
 
-  // Listen for custom messages with server URL, player ID, name, and sync delay
+  // Listen for custom messages with server URL, player ID, name, and codecs
   context.addCustomMessageListener(CAST_NAMESPACE, (event) => {
     console.log("Sendspin: Received message from sender:", event.data);
     if (!event.data) {
@@ -581,7 +578,6 @@ function tryInitCastReceiver(): boolean {
     const serverUrl = event.data.serverUrl;
     const playerId = event.data.playerId;
     const playerName = event.data.playerName;
-    const syncDelay = event.data.syncDelay;
     const codecs = event.data.codecs;
 
     if (Array.isArray(codecs) && codecs.every(isCodec)) {
@@ -597,16 +593,6 @@ function tryInitCastReceiver(): boolean {
       // Store the player name provided by Music Assistant
       providedPlayerName = playerName;
       console.log("Sendspin: Using player name from sender:", playerName);
-    }
-    if (typeof syncDelay === "number") {
-      // Store the sync delay provided by Music Assistant
-      providedSyncDelay = syncDelay;
-      console.log("Sendspin: Using sync delay from sender:", syncDelay, "ms");
-      // Update existing player if already connected
-      if (player) {
-        player.setSyncDelay(syncDelay);
-        console.log("Sendspin: Updated sync delay on existing player");
-      }
     }
     // Check if codecs changed on an existing player - requires reconnect
     if (
