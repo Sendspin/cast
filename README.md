@@ -30,8 +30,8 @@ yarn preview
 
 ## How It Works
 
-- The sender page (`dist/index.html`) lets you enter the Sendspin server host, preferred codec, and static delay.
-- When you cast, it launches the receiver app (`dist/receiver.html`) on the Cast device and sends a message over the custom namespace `urn:x-cast:sendspin` with `{ serverUrl, codecs, staticDelay }`.
+- The sender page (`dist/index.html`) lets you enter the Sendspin server host, preferred codec, and sync delay.
+- When you cast, it launches the receiver app (`dist/receiver.html`) on the Cast device and sends a message over the custom namespace `urn:x-cast:sendspin` with `{ serverUrl, codecs, syncDelay }`.
 - The receiver creates a Sendspin JS SDK player, connects to `${serverUrl}/sendspin`, and streams audio directly to the device using Web Audio (direct output mode) with hardware volume integration.
 
 ## Cast Message Protocol
@@ -48,19 +48,19 @@ All messages between sender and receiver use the custom namespace `urn:x-cast:se
   "serverUrl": "http://192.168.1.100:8927",
   "playerId": "cast-abc123",
   "playerName": "Living Room Speaker",
-  "staticDelay": 330,
+  "syncDelay": 0,
   "codecs": ["flac"]
 }
 ```
 
-| Field         | Type     | Required | Description                                                      |
-| ------------- | -------- | -------- | ---------------------------------------------------------------- |
-| `type`        | string   | No\*     | Message type (`"config"`). Optional for backwards compatibility. |
-| `serverUrl`   | string   | No       | Sendspin server URL. Triggers connection when changed.           |
-| `playerId`    | string   | No       | Player ID override.                                              |
-| `playerName`  | string   | No       | Friendly name for the player.                                    |
-| `staticDelay` | number   | No       | Static delay (0-5000ms) to compensate for equipment latency.     |
-| `codecs`      | string[] | No       | Audio codecs: `["flac"]`, `["opus"]`, or `["pcm"]`.              |
+| Field        | Type     | Required | Description                                                      |
+| ------------ | -------- | -------- | ---------------------------------------------------------------- |
+| `type`       | string   | No\*     | Message type (`"config"`). Optional for backwards compatibility. |
+| `serverUrl`  | string   | No       | Sendspin server URL. Triggers connection when changed.           |
+| `playerId`   | string   | No       | Player ID override.                                              |
+| `playerName` | string   | No       | Friendly name for the player.                                    |
+| `syncDelay`  | number   | No       | Sync delay in milliseconds (can be negative).                    |
+| `codecs`     | string[] | No       | Audio codecs: `["flac"]`, `["opus"]`, or `["pcm"]`.              |
 
 ### Receiver → Sender Messages
 

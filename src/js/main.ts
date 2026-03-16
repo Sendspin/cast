@@ -144,7 +144,7 @@ function sendStatusToSender(status: {
 let providedPlayerId: string | null = null;
 let providedPlayerName: string | null = null;
 let providedCodecs: Codec[] | null = null;
-let providedStaticDelay: number = 0;
+let providedSyncDelay: number = 0;
 
 // Track current connection settings (for detecting changes that require reconnect)
 let currentServerUrl: string | null = null;
@@ -324,7 +324,7 @@ async function connectToServer(
     clientName,
     correctionMode: "sync", // Explicit sync mode for multi-device playback
     storage: memoryStorage, // Cast doesn't support localStorage
-    syncDelay: -providedStaticDelay,
+    syncDelay: -providedSyncDelay,
     bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
     // Use codecs from sender config, default to PCM for maximum compatibility
     codecs: providedCodecs ?? DEFAULT_CODECS,
@@ -595,15 +595,11 @@ function tryInitCastReceiver(): boolean {
       providedPlayerName = playerName;
       console.log("Sendspin: Using player name from sender:", playerName);
     }
-    const staticDelay = event.data.staticDelay;
-    if (
-      typeof staticDelay === "number" &&
-      staticDelay >= 0 &&
-      staticDelay <= 5000
-    ) {
-      providedStaticDelay = staticDelay;
+    const syncDelay = event.data.syncDelay;
+    if (typeof syncDelay === "number" && syncDelay >= 0 && syncDelay <= 5000) {
+      providedSyncDelay = syncDelay;
       if (player) {
-        player.setSyncDelay(-staticDelay);
+        player.setSyncDelay(-syncDelay);
       }
     }
     // Check if codecs changed on an existing player - requires reconnect

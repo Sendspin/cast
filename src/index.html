@@ -249,10 +249,10 @@
       </div>
 
       <div class="server-config" style="margin-top: 16px">
-        <label for="staticDelay">Static Delay (ms)</label>
+        <label for="syncDelay">Sync Delay (ms)</label>
         <input
           type="number"
-          id="staticDelay"
+          id="syncDelay"
           min="0"
           max="5000"
           step="10"
@@ -315,7 +315,7 @@
       }
       const savedDelay = localStorage.getItem("sendspin_static_delay");
       if (savedDelay) {
-        document.getElementById("staticDelay").value = savedDelay;
+        document.getElementById("syncDelay").value = savedDelay;
       }
 
       // Get app ID from query param (localhost only) or use default
@@ -362,19 +362,19 @@
         return [codec];
       }
 
-      function getStaticDelay() {
-        const val = parseInt(document.getElementById("staticDelay").value, 10);
+      function getSyncDelay() {
+        const val = parseInt(document.getElementById("syncDelay").value, 10);
         const clamped = Math.max(0, Math.min(5000, isNaN(val) ? 330 : val));
         localStorage.setItem("sendspin_static_delay", String(clamped));
         return clamped;
       }
 
-      document.getElementById("staticDelay").addEventListener("change", () => {
+      document.getElementById("syncDelay").addEventListener("change", () => {
         if (castSession) {
           castSession
             .sendMessage(CAST_NAMESPACE, {
               type: "config",
-              staticDelay: getStaticDelay(),
+              syncDelay: getSyncDelay(),
             })
             .catch((err) => {
               console.error("Failed to send delay update:", err);
@@ -493,7 +493,7 @@
                       type: "config",
                       serverUrl,
                       codecs,
-                      staticDelay: getStaticDelay(),
+                      syncDelay: getSyncDelay(),
                     })
                     .catch((err) => {
                       updateStatus({
