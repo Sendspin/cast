@@ -444,6 +444,17 @@
               message = JSON.parse(message);
             } catch (e) {}
           }
+          if (
+            message &&
+            message.type === "config" &&
+            typeof message.syncDelay === "number"
+          ) {
+            document.getElementById("syncDelay").value = message.syncDelay;
+            localStorage.setItem(
+              "sendspin_static_delay",
+              String(message.syncDelay),
+            );
+          }
           if (message && message.state) {
             updateStatus(message);
           }

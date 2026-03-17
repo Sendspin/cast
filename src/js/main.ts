@@ -331,6 +331,15 @@ async function connectToServer(
     // Use hardware volume control (Cast system volume)
     useHardwareVolume: true,
     onVolumeCommand: setHardwareVolume,
+    onDelayCommand: (delayMs: number) => {
+      providedSyncDelay = delayMs;
+      if (castContext) {
+        castContext.sendCustomMessage(CAST_NAMESPACE, undefined, {
+          type: "config",
+          syncDelay: delayMs,
+        });
+      }
+    },
     getExternalVolume: getHardwareVolume,
     useOutputLatencyCompensation: true,
     onStateChange: (state) => {
