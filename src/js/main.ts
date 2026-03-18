@@ -64,6 +64,12 @@ function isCodec(value: unknown): value is Codec {
   );
 }
 
+/** Build a full codec list with preferred codecs first, remaining codecs after. */
+function buildCodecList(preferred: Codec[]): Codec[] {
+  const rest = KNOWN_CODECS.filter((c) => !preferred.includes(c));
+  return [...preferred, ...rest];
+}
+
 // Global error handlers - use window.showError from receiver.html
 window.onerror = (message, source, lineno, colno, error) => {
   const fullError =
@@ -328,8 +334,9 @@ async function connectToServer(
     storage: memoryStorage, // Cast doesn't support localStorage
     syncDelay: providedSyncDelay,
     bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
-    // Use codecs from sender config, default to PCM for maximum compatibility
-    codecs: providedCodecs ?? DEFAULT_CODECS,
+    // Use codecs from sender config, default to PCM for maximum compatibility.
+    // Advertise all known codecs but with the preferred one(s) first.
+    codecs: buildCodecList(providedCodecs ?? DEFAULT_CODECS),
     // Use hardware volume control (Cast system volume)
     useHardwareVolume: true,
     onVolumeCommand: setHardwareVolume,
