@@ -20,7 +20,6 @@ declare global {
     setPlaybackState?: (isPlaying: boolean) => void;
     setDebug?: (text: string) => void;
     cast?: any;
-    __legacyCast?: boolean;
     setNowPlaying?: (metadata: NowPlayingMetadata | null) => void;
     setVolume?: (level: number, muted: boolean) => void;
     setProgress?: (currentSeconds: number, totalSeconds: number) => void;
@@ -574,13 +573,7 @@ function handleSenderMessage(rawMessage: unknown) {
   const codecs = data.codecs;
 
   if (Array.isArray(codecs)) {
-    let filteredCodecs = codecs.filter(isCodec);
-    if (window.__legacyCast) {
-      filteredCodecs = filteredCodecs.filter((codec) => codec === "pcm");
-      if (filteredCodecs.length === 0) {
-        filteredCodecs = ["pcm"];
-      }
-    }
+    const filteredCodecs = codecs.filter(isCodec);
     if (filteredCodecs.length > 0) {
       providedCodecs = filteredCodecs;
       console.log("Sendspin: Using codecs from sender:", filteredCodecs);
@@ -828,8 +821,6 @@ function tryInitLegacyReceiver(): boolean {
 async function initCastReceiver() {
   for (let attempt = 0; attempt < MAX_INIT_RETRIES; attempt += 1) {
     const sdk = await ensureCastSdkLoaded();
-    window.__legacyCast = sdk === "legacy";
-
     if (sdk && (tryInitCafReceiver() || tryInitLegacyReceiver())) {
       console.log(`Sendspin: Using ${sdk} Cast receiver SDK`);
       return;
