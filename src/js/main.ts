@@ -19,6 +19,8 @@ declare global {
     setStatus?: (text: string) => void;
     setPlaybackState?: (isPlaying: boolean) => void;
     setDebug?: (text: string) => void;
+    cast?: any;
+    __legacyCast?: boolean;
     setNowPlaying?: (metadata: NowPlayingMetadata | null) => void;
     setVolume?: (level: number, muted: boolean) => void;
     setProgress?: (currentSeconds: number, totalSeconds: number) => void;
@@ -75,17 +77,19 @@ window.onunhandledrejection = (event) => {
   window.showError?.("Unhandled Promise Rejection", event.reason);
 };
 
-// Cast context type - extends SDK type with volume methods missing from @types
-// Methods are optional as they may not exist on all Cast devices/SDK versions
-type CastReceiverContext = ReturnType<
-  typeof cast.framework.CastReceiverContext.getInstance
-> & {
-  // These methods exist in SDK but are missing from @types/chromecast-caf-receiver
-  getSystemVolume?(): SystemVolumeData | null;
-  setSystemVolumeLevel?(level: number): void;
-  setSystemVolumeMuted?(muted: boolean): void;
-};
-let castContext: CastReceiverContext | null = null;
+// Unified wrapper so CAF and legacy receiver paths expose the same API.
+interface CastContextWrapper {
+  getSystemVolume(): SystemVolumeData | null;
+  setSystemVolumeLevel(level: number): void;
+  setSystemVolumeMuted(muted: boolean): void;
+  sendCustomMessage(
+    namespace: string,
+    senderId: string | undefined,
+    data: unknown,
+  ): void;
+  stop(): void;
+}
+let castContext: CastContextWrapper | null = null;
 
 let player: SendspinPlayer | undefined;
 
@@ -477,25 +481,174 @@ function sendPlayerStatus(player: SendspinPlayer) {
 }
 
 let receiverStarted = false;
+let activeSenderId: string | undefined;
+let preferLegacyAfterCafFailure = false;
 
-// Try to initialize Cast Receiver (returns true on success)
-function tryInitCastReceiver(): boolean {
+type LoadedCastSdk = "caf-v3" | "caf-v2" | "legacy";
+
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+async function ensureCastSdkLoaded(): Promise<LoadedCastSdk | null> {
+  if (
+    !preferLegacyAfterCafFailure &&
+    window.cast?.framework?.CastReceiverContext
+  ) {
+    return "caf-v3";
+  }
+  if (window.cast?.receiver?.CastReceiverManager) {
+    return "legacy";
+  }
+
+  if (!preferLegacyAfterCafFailure) {
+    try {
+      await loadScript(
+        "//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js",
+      );
+      if (window.cast?.framework?.CastReceiverContext) {
+        return "caf-v3";
+      }
+    } catch (error) {
+      console.warn("Sendspin: CAF v3 load failed, trying CAF v2", error);
+    }
+
+    try {
+      await loadScript(
+        "//www.gstatic.com/cast/sdk/libs/caf_receiver/v2/cast_receiver_framework.js",
+      );
+      if (window.cast?.framework?.CastReceiverContext) {
+        return "caf-v2";
+      }
+    } catch (error) {
+      console.warn(
+        "Sendspin: CAF v2 load failed, trying legacy receiver API",
+        error,
+      );
+    }
+  }
+
+  try {
+    await loadScript(
+      "//www.gstatic.com/cast/sdk/libs/receiver/2.0.0/cast_receiver.js",
+    );
+    if (window.cast?.receiver?.CastReceiverManager) {
+      return "legacy";
+    }
+  } catch (error) {
+    console.warn("Sendspin: Legacy Cast Receiver API load failed", error);
+  }
+
+  return null;
+}
+
+function handleSenderMessage(rawMessage: unknown) {
+  if (!rawMessage) {
+    return;
+  }
+  let message = rawMessage;
+  if (typeof message === "string") {
+    try {
+      message = JSON.parse(message);
+    } catch {
+      return;
+    }
+  }
+  console.log("Sendspin: Received message from sender:", message);
+
+  const data = message as Record<string, unknown>;
+  const serverUrl =
+    typeof data.serverUrl === "string" ? data.serverUrl : undefined;
+  const playerId =
+    typeof data.playerId === "string" ? data.playerId : undefined;
+  const playerName =
+    typeof data.playerName === "string" ? data.playerName : undefined;
+  const syncDelay =
+    typeof data.syncDelay === "number" ? data.syncDelay : undefined;
+  const codecs = data.codecs;
+
+  if (Array.isArray(codecs)) {
+    let filteredCodecs = codecs.filter(isCodec);
+    if (window.__legacyCast) {
+      filteredCodecs = filteredCodecs.filter((codec) => codec === "pcm");
+      if (filteredCodecs.length === 0) {
+        filteredCodecs = ["pcm"];
+      }
+    }
+    if (filteredCodecs.length > 0) {
+      providedCodecs = filteredCodecs;
+      console.log("Sendspin: Using codecs from sender:", filteredCodecs);
+    }
+  }
+  if (playerId) {
+    providedPlayerId = playerId;
+    console.log("Sendspin: Using player ID from sender:", playerId);
+  }
+  if (playerName) {
+    providedPlayerName = playerName;
+    console.log("Sendspin: Using player name from sender:", playerName);
+  }
+  if (syncDelay !== undefined) {
+    providedSyncDelay = syncDelay;
+    console.log("Sendspin: Using sync delay from sender:", syncDelay, "ms");
+    if (player) {
+      player.setSyncDelay(syncDelay);
+      console.log("Sendspin: Updated sync delay on existing player");
+    }
+  }
+
+  if (
+    player &&
+    currentPlayerCodecs &&
+    providedCodecs &&
+    JSON.stringify(providedCodecs) !== JSON.stringify(currentPlayerCodecs)
+  ) {
+    const targetUrl = serverUrl ?? currentServerUrl;
+    if (targetUrl) {
+      console.log("Sendspin: Codecs changed, reconnecting...");
+      void connectToServer(targetUrl);
+    }
+    return;
+  }
+
+  if (serverUrl && serverUrl !== currentServerUrl) {
+    void connectToServer(serverUrl);
+  }
+}
+
+// Try to initialize CAF receiver APIs first.
+function tryInitCafReceiver(): boolean {
   if (receiverStarted) {
     return true;
   }
 
-  // cast is a global from the Cast SDK script - check if loaded
-  const castFramework =
-    typeof cast !== "undefined" ? cast.framework : undefined;
-  const context = castFramework?.CastReceiverContext?.getInstance();
-  if (!castFramework || !context) {
+  const context = window.cast?.framework?.CastReceiverContext?.getInstance?.();
+  if (!context) {
     return false;
   }
   receiverStarted = true;
 
-  // Store context for sending messages back to sender
-  // Cast to our extended type (SDK has methods missing from @types)
-  castContext = context as CastReceiverContext;
+  castContext = {
+    getSystemVolume: () => (context as any).getSystemVolume?.() ?? null,
+    setSystemVolumeLevel: (level: number) =>
+      (context as any).setSystemVolumeLevel?.(level),
+    setSystemVolumeMuted: (muted: boolean) =>
+      (context as any).setSystemVolumeMuted?.(muted),
+    sendCustomMessage: (
+      namespace: string,
+      senderId: string | undefined,
+      data: unknown,
+    ) => {
+      context.sendCustomMessage(namespace, senderId ?? activeSenderId, data);
+    },
+    stop: () => (context as any).stop?.(),
+  };
 
   // Handle remote control keys (OK for play/pause, left/right for skip)
   document.addEventListener("keydown", (event) => {
@@ -520,23 +673,39 @@ function tryInitCastReceiver(): boolean {
     }
   });
 
-  console.log("Sendspin: Initializing Cast Receiver...");
+  console.log("Sendspin: Initializing CAF receiver...");
   window.setStatus?.("Waiting for sender...");
 
-  // Listen for system (hardware) volume changes
+  const eventType = window.cast?.framework?.system?.EventType;
+  context.addEventListener(eventType?.READY ?? "READY", () => {
+    console.log("Sendspin: Cast receiver READY");
+  });
   context.addEventListener(
-    castFramework.system.EventType.SYSTEM_VOLUME_CHANGED,
-    (event) => {
-      const volumeData = event.data as SystemVolumeData;
-      console.log("Sendspin: System volume changed:", volumeData);
+    eventType?.SENDER_CONNECTED ?? "SENDER_CONNECTED",
+    () => {
+      console.log("Sendspin: Sender connected");
+    },
+  );
+  context.addEventListener(
+    eventType?.SENDER_DISCONNECTED ?? "SENDER_DISCONNECTED",
+    () => {
+      console.log("Sendspin: Sender disconnected");
+      window.setStatus?.("Disconnected");
+    },
+  );
+  context.addEventListener(eventType?.ERROR ?? "ERROR", (event: any) => {
+    console.error("Sendspin: Cast error:", event);
+  });
+  context.addEventListener(
+    eventType?.SYSTEM_VOLUME_CHANGED ?? "SYSTEM_VOLUME_CHANGED",
+    (event: any) => {
+      console.log("Sendspin: System volume changed:", event?.data);
       const hwVol = getHardwareVolume();
       window.setVolume?.(hwVol.volume / 100, hwVol.muted);
       window.setStatus?.(currentPlayerState.isPlaying ? "Playing" : "Paused");
-      // Send volume update to sender
       if (player) {
         sendPlayerStatus(player);
       } else {
-        // No player yet, send basic volume update
         sendStatusToSender({
           state: "connected",
           volume: hwVol.volume,
@@ -546,110 +715,133 @@ function tryInitCastReceiver(): boolean {
     },
   );
 
-  // Cast event listeners
-  context.addEventListener(castFramework.system.EventType.READY, () => {
-    console.log("Sendspin: Cast receiver READY");
+  context.addCustomMessageListener(CAST_NAMESPACE, (event: any) => {
+    activeSenderId = event?.senderId ?? activeSenderId;
+    handleSenderMessage(event?.data);
   });
 
-  context.addEventListener(
-    castFramework.system.EventType.SENDER_CONNECTED,
-    () => {
-      console.log("Sendspin: Sender connected");
-    },
-  );
-
-  context.addEventListener(
-    castFramework.system.EventType.SENDER_DISCONNECTED,
-    () => {
-      console.log("Sendspin: Sender disconnected");
-      window.setStatus?.("Disconnected");
-    },
-  );
-
-  context.addEventListener(castFramework.system.EventType.ERROR, (event) => {
-    console.error("Sendspin: Cast error:", event);
-  });
-
-  // Listen for custom messages with server URL, player ID, name, and sync delay
-  context.addCustomMessageListener(CAST_NAMESPACE, (event) => {
-    console.log("Sendspin: Received message from sender:", event.data);
-    if (!event.data) {
-      return;
-    }
-
-    // type = "config"
-    const serverUrl = event.data.serverUrl;
-    const playerId = event.data.playerId;
-    const playerName = event.data.playerName;
-    const syncDelay = event.data.syncDelay;
-    const codecs = event.data.codecs;
-
-    if (Array.isArray(codecs) && codecs.every(isCodec)) {
-      providedCodecs = codecs;
-      console.log("Sendspin: Using codecs from sender:", codecs);
-    }
-    if (playerId) {
-      // Store the player ID provided by Music Assistant
-      providedPlayerId = playerId;
-      console.log("Sendspin: Using player ID from sender:", playerId);
-    }
-    if (playerName) {
-      // Store the player name provided by Music Assistant
-      providedPlayerName = playerName;
-      console.log("Sendspin: Using player name from sender:", playerName);
-    }
-    if (typeof syncDelay === "number") {
-      // Store the sync delay provided by Music Assistant
-      providedSyncDelay = syncDelay;
-      console.log("Sendspin: Using sync delay from sender:", syncDelay, "ms");
-      // Update existing player if already connected
-      if (player) {
-        player.setSyncDelay(syncDelay);
-        console.log("Sendspin: Updated sync delay on existing player");
-      }
-    }
-    // Check if codecs changed on an existing player - requires reconnect
-    if (
-      player &&
-      currentPlayerCodecs &&
-      providedCodecs &&
-      // Check for actual changes in codecs
-      JSON.stringify(providedCodecs) !== JSON.stringify(currentPlayerCodecs)
-    ) {
-      const targetUrl = serverUrl ?? currentServerUrl;
-      if (targetUrl) {
-        console.log("Sendspin: Codecs changed, reconnecting...");
-        connectToServer(targetUrl);
-      }
-      return;
-    }
-
-    if (serverUrl && serverUrl !== currentServerUrl) {
-      connectToServer(serverUrl);
-    }
-  });
-
-  // Start the Cast receiver with options
-  const options = new castFramework.CastReceiverOptions();
-  options.disableIdleTimeout = true;
-  options.maxInactivity = 3600; // 1 hour max inactivity
-
-  context.start(options);
-  console.log("Sendspin: Cast Receiver started");
+  const startOptions: Record<string, unknown> = {
+    statusText: "Ready to play",
+    disableIdleTimeout: true,
+    maxInactivity: 3600,
+  };
+  const messageType = window.cast?.framework?.system?.MessageType?.JSON;
+  if (messageType) {
+    startOptions.customNamespaces = {
+      [CAST_NAMESPACE]: messageType,
+    };
+  }
+  try {
+    context.start(startOptions);
+  } catch (error) {
+    console.error("Sendspin: CAF receiver start failed, falling back", error);
+    castContext = null;
+    receiverStarted = false;
+    preferLegacyAfterCafFailure = true;
+    return false;
+  }
+  console.log("Sendspin: CAF Receiver started");
 
   return true;
 }
 
-function initCastReceiverWithRetry(attempt = 0) {
-  if (tryInitCastReceiver()) {
-    return;
+// Try to initialize legacy Cast Receiver API (fallback)
+function tryInitLegacyReceiver(): boolean {
+  if (receiverStarted) {
+    return true;
   }
-  if (attempt >= MAX_INIT_RETRIES) {
-    console.log("Sendspin: Cast SDK not available");
-    window.setStatus?.("Not running in a Cast receiver context");
-    return;
+
+  const receiverApi = window.cast?.receiver;
+  const manager = receiverApi?.CastReceiverManager?.getInstance?.();
+  const messageBus = manager?.getCastMessageBus?.(CAST_NAMESPACE);
+  if (!receiverApi || !manager || !messageBus) {
+    return false;
   }
-  setTimeout(() => initCastReceiverWithRetry(attempt + 1), RETRY_DELAY_MS);
+  receiverStarted = true;
+
+  castContext = {
+    getSystemVolume: () => (manager as any).getSystemVolume?.() ?? null,
+    setSystemVolumeLevel: (level: number) =>
+      (manager as any).setSystemVolumeLevel?.(level),
+    setSystemVolumeMuted: (muted: boolean) =>
+      (manager as any).setSystemVolumeMuted?.(muted),
+    sendCustomMessage: (
+      _namespace: string,
+      _senderId: string | undefined,
+      data: unknown,
+    ) => {
+      const payload = typeof data === "string" ? data : JSON.stringify(data);
+      messageBus.broadcast(payload);
+    },
+    stop: () => (manager as any).stop?.(),
+  };
+  console.log("Sendspin: Initializing legacy Cast Receiver...");
+  window.setStatus?.("Waiting for sender...");
+
+  manager.onReady = () => {
+    console.log("Sendspin: Cast receiver READY");
+  };
+
+  manager.onSenderConnected = () => {
+    console.log("Sendspin: Sender connected");
+  };
+
+  manager.onSenderDisconnected = () => {
+    console.log("Sendspin: Sender disconnected");
+    window.setStatus?.("Disconnected");
+  };
+
+  manager.onError = (event: any) => {
+    console.error("Sendspin: Cast error:", event);
+  };
+
+  manager.onSystemVolumeChanged = (event: any) => {
+    console.log("Sendspin: System volume changed:", event?.data);
+    const hwVol = getHardwareVolume();
+    window.setVolume?.(hwVol.volume / 100, hwVol.muted);
+    window.setStatus?.(currentPlayerState.isPlaying ? "Playing" : "Paused");
+    if (player) {
+      sendPlayerStatus(player);
+    } else {
+      sendStatusToSender({
+        state: "connected",
+        volume: hwVol.volume,
+        muted: hwVol.muted,
+      });
+    }
+  };
+
+  messageBus.onMessage = (event: any) => {
+    activeSenderId = event?.senderId ?? activeSenderId;
+    handleSenderMessage(event?.data);
+  };
+
+  manager.start({
+    statusText: "Ready to play",
+    maxInactivity: 3600,
+  });
+  console.log("Sendspin: Legacy Cast Receiver started");
+
+  return true;
 }
 
-initCastReceiverWithRetry();
+async function initCastReceiver() {
+  for (let attempt = 0; attempt < MAX_INIT_RETRIES; attempt += 1) {
+    const sdk = await ensureCastSdkLoaded();
+    window.__legacyCast = sdk === "legacy";
+
+    if (sdk && (tryInitCafReceiver() || tryInitLegacyReceiver())) {
+      console.log(`Sendspin: Using ${sdk} Cast receiver SDK`);
+      return;
+    }
+
+    if (attempt < MAX_INIT_RETRIES - 1) {
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
+
+  console.log("Sendspin: Cast SDK not available");
+  window.setStatus?.("Not running in a Cast receiver context");
+}
+
+void initCastReceiver();
