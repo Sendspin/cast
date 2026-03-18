@@ -645,7 +645,7 @@ function tryInitCafReceiver(): boolean {
       senderId: string | undefined,
       data: unknown,
     ) => {
-      context.sendCustomMessage(namespace, senderId ?? activeSenderId, data);
+      context.sendCustomMessage(namespace, senderId, data);
     },
     stop: () => (context as any).stop?.(),
   };
