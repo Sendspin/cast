@@ -47,7 +47,7 @@ const memoryStorage = {
   setItem: (key: string, value: string) => sessionStorage.set(key, value),
 };
 
-const KNOWN_CODECS = ["pcm", "flac", "opus"] as const;
+const KNOWN_CODECS = ["flac", "pcm", "opus"] as const;
 type Codec = (typeof KNOWN_CODECS)[number];
 const DEFAULT_CODECS: Codec[] = ["pcm"];
 const MAX_INIT_RETRIES = 40;
