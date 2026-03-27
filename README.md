@@ -59,7 +59,7 @@ All messages between sender and receiver use the custom namespace `urn:x-cast:se
 | `serverUrl`  | string   | No       | Sendspin server URL. Triggers connection when changed.           |
 | `playerId`   | string   | No       | Player ID override.                                              |
 | `playerName` | string   | No       | Friendly name for the player.                                    |
-| `syncDelay`  | number   | No       | Sync delay in milliseconds (can be negative).                    |
+| `syncDelay`  | number   | No       | Sync delay in milliseconds (0-5000, positive = play earlier).    |
 | `codecs`     | string[] | No       | Audio codecs: `["flac"]`, `["opus"]`, or `["pcm"]`.              |
 
 ### Receiver → Sender Messages

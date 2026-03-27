@@ -324,7 +324,7 @@ async function connectToServer(
     clientName,
     correctionMode: "sync", // Explicit sync mode for multi-device playback
     storage: memoryStorage, // Cast doesn't support localStorage
-    syncDelay: -providedSyncDelay,
+    syncDelay: providedSyncDelay,
     bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
     // Use codecs from sender config, default to PCM for maximum compatibility
     codecs: providedCodecs ?? DEFAULT_CODECS,
@@ -608,7 +608,7 @@ function tryInitCastReceiver(): boolean {
     if (typeof syncDelay === "number" && syncDelay >= 0 && syncDelay <= 5000) {
       providedSyncDelay = syncDelay;
       if (player) {
-        player.setSyncDelay(-syncDelay);
+        player.setSyncDelay(syncDelay);
       }
     }
     // Check if codecs changed on an existing player - requires reconnect
