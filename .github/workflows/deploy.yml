@@ -33,7 +33,7 @@ jobs:
           mkdir -p staging
 
           # Read channels from main's channels.json
-          channels=$(cat main/channels.json)
+          channels=$(cat main/release-channels.json)
           count=$(echo "$channels" | jq length)
 
           for i in $(seq 0 $(( count - 1 ))); do
