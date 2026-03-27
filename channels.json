@@ -4,5 +4,11 @@
     "branch": "main",
     "path": ".",
     "castId": "938CBF87"
+  },
+  {
+    "name": "beta",
+    "branch": "beta",
+    "path": "beta",
+    "castId": "CHANGE_ME"
   }
 ]
