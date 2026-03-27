@@ -285,7 +285,7 @@
     </div>
 
     <script>
-      const DEFAULT_APP_ID = "938CBF87";
+      const DEFAULT_APP_ID = "__CAST_APP_ID__";
       const CAST_NAMESPACE = "urn:x-cast:sendspin";
       let castContext = null;
       let castSession = null;
@@ -311,9 +311,13 @@
         document.getElementById("codec").value = savedCodec;
       }
 
-      // Get app ID from query param (localhost only) or use default
+      // Dev fallback: when running locally, the placeholder is unreplaced.
+      // Use a dev Cast ID so local development works without a build step.
+      const DEV_APP_ID = "938CBF87";
+      const isPlaceholder = DEFAULT_APP_ID === "__CAST_APP_ID__";
       const appIdFromUrl = isLocalhost ? urlParams.get("appId") : null;
-      const APP_ID = appIdFromUrl || DEFAULT_APP_ID;
+      const APP_ID =
+        appIdFromUrl || (isPlaceholder ? DEV_APP_ID : DEFAULT_APP_ID);
 
       // Show custom app ID notice if using non-default
       if (appIdFromUrl) {
@@ -321,8 +325,8 @@
         document.getElementById("customAppIdValue").textContent = appIdFromUrl;
       }
 
-      // Show dev footer on localhost
-      if (isLocalhost) {
+      // Show dev footer when placeholder is unreplaced (dev) or on localhost
+      if (isPlaceholder || isLocalhost) {
         document.getElementById("devFooter").style.display = "block";
         document
           .getElementById("customizeAppId")
