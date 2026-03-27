@@ -3,12 +3,12 @@
     "name": "stable",
     "branch": "main",
     "path": ".",
-    "castId": "938CBF87"
+    "castId": "931BC295"
   },
   {
     "name": "beta",
     "branch": "beta",
     "path": "beta",
-    "castId": "CHANGE_ME"
+    "castId": "F5AA9181"
   }
 ]
