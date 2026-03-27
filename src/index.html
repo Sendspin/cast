@@ -314,7 +314,7 @@
       // Dev fallback: when running locally, the placeholder is unreplaced.
       // Use a dev Cast ID so local development works without a build step.
       const DEV_APP_ID = "938CBF87";
-      const isPlaceholder = DEFAULT_APP_ID === "__CAST_APP_ID__";
+      const isPlaceholder = DEFAULT_APP_ID.startsWith("__CAST_");
       const appIdFromUrl = isLocalhost ? urlParams.get("appId") : null;
       const APP_ID =
         appIdFromUrl || (isPlaceholder ? DEV_APP_ID : DEFAULT_APP_ID);
