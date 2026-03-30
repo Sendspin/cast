@@ -317,7 +317,8 @@
       const isPlaceholder = DEFAULT_APP_ID.startsWith("__CAST_");
       const appIdFromUrl = isLocalhost ? urlParams.get("appId") : null;
       const APP_ID =
-        appIdFromUrl || (isPlaceholder ? DEV_APP_ID : DEFAULT_APP_ID);
+        appIdFromUrl ||
+        (isLocalhost && isPlaceholder ? DEV_APP_ID : DEFAULT_APP_ID);
 
       // Show custom app ID notice if using non-default
       if (appIdFromUrl) {
