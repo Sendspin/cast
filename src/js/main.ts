@@ -615,6 +615,35 @@ function handleSenderMessage(rawMessage: unknown) {
   }
 }
 
+let keydownListenerAdded = false;
+
+function installKeydownHandler() {
+  if (keydownListenerAdded) return;
+  keydownListenerAdded = true;
+  // Handle remote control keys (OK for play/pause, left/right for skip)
+  document.addEventListener("keydown", (event) => {
+    switch (event.key) {
+      case "Enter": // OK button
+      case " ": // Space bar (for testing)
+        console.log("Sendspin: Play/Pause key pressed");
+        if (currentPlayerState.isPlaying) {
+          player?.sendCommand("pause", undefined as never);
+        } else {
+          player?.sendCommand("play", undefined as never);
+        }
+        break;
+      case "ArrowLeft":
+        console.log("Sendspin: Previous key pressed");
+        player?.sendCommand("previous", undefined as never);
+        break;
+      case "ArrowRight":
+        console.log("Sendspin: Next key pressed");
+        player?.sendCommand("next", undefined as never);
+        break;
+    }
+  });
+}
+
 // Try to initialize CAF receiver APIs first.
 function tryInitCafReceiver(): boolean {
   if (receiverStarted) {
@@ -643,28 +672,7 @@ function tryInitCafReceiver(): boolean {
     stop: () => (context as any).stop?.(),
   };
 
-  // Handle remote control keys (OK for play/pause, left/right for skip)
-  document.addEventListener("keydown", (event) => {
-    switch (event.key) {
-      case "Enter": // OK button
-      case " ": // Space bar (for testing)
-        console.log("Sendspin: Play/Pause key pressed");
-        if (currentPlayerState.isPlaying) {
-          player?.sendCommand("pause", undefined as never);
-        } else {
-          player?.sendCommand("play", undefined as never);
-        }
-        break;
-      case "ArrowLeft":
-        console.log("Sendspin: Previous key pressed");
-        player?.sendCommand("previous", undefined as never);
-        break;
-      case "ArrowRight":
-        console.log("Sendspin: Next key pressed");
-        player?.sendCommand("next", undefined as never);
-        break;
-    }
-  });
+  installKeydownHandler();
 
   console.log("Sendspin: Initializing CAF receiver...");
   window.setStatus?.("Waiting for sender...");
@@ -768,6 +776,7 @@ function tryInitLegacyReceiver(): boolean {
     },
     stop: () => (manager as any).stop?.(),
   };
+  installKeydownHandler();
   console.log("Sendspin: Initializing legacy Cast Receiver...");
   window.setStatus?.("Waiting for sender...");
 
