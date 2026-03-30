@@ -22,11 +22,5 @@
     "branch": "ma-2.8",
     "path": ".",
     "castId": "938CBF87"
-  },
-  {
-    "name": "ma-2.9 branch",
-    "branch": "ma-2.9",
-    "path": "ma-2.9",
-    "castId": "DD107DDB"
   }
 ]
