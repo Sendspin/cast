@@ -32,7 +32,7 @@ jobs:
           set -euo pipefail
           mkdir -p staging
 
-          # Read channels from main's channels.json
+          # Read channels from main's release-channels.json
           channels=$(cat main/release-channels.json)
           count=$(echo "$channels" | jq length)
 
