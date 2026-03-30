@@ -1,14 +1,26 @@
 [
   {
-    "name": "stable",
+    "name": "main branch",
     "branch": "main",
-    "path": ".",
-    "castId": "931BC295"
+    "path": "main",
+    "castId": "FAB7FE2B"
   },
   {
-    "name": "beta",
+    "name": "beta branch",
     "branch": "beta",
     "path": "beta",
-    "castId": "F5AA9181"
+    "castId": "7D69F439"
+  },
+  {
+    "name": "ma-2.8 branch",
+    "branch": "ma-2.8",
+    "path": ".",
+    "castId": "938CBF87"
+  },
+  {
+    "name": "ma-2.9 branch",
+    "branch": "ma-2.9",
+    "path": "ma-2.9",
+    "castId": "DD107DDB"
   }
 ]
