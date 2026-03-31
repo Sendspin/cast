@@ -623,8 +623,9 @@ function tryInitCastReceiver(): boolean {
       player &&
       currentPlayerCodecs &&
       providedCodecs &&
-      // Check for actual changes in codecs
-      JSON.stringify(providedCodecs) !== JSON.stringify(currentPlayerCodecs)
+      // Check for actual changes in the expanded codec list
+      JSON.stringify(buildCodecList(providedCodecs)) !==
+        JSON.stringify(buildCodecList(currentPlayerCodecs))
     ) {
       const targetUrl = serverUrl ?? currentServerUrl;
       if (targetUrl) {
