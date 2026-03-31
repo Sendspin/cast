@@ -325,7 +325,9 @@
           <option value="info">Info</option>
           <option value="debug">Debug</option>
         </select>
-        <small>Forward receiver console output at this level or above.</small>
+        <small
+          >Forward receiver console output at this severity or higher.</small
+        >
       </div>
 
       <div class="buttons">
@@ -458,11 +460,11 @@
         document.getElementById("status").innerHTML = text;
       }
 
-      function appendReceiverLog(level, text) {
+      function appendReceiverLog(level, text, timestamp) {
         const logEl = document.getElementById("receiverLog");
         const placeholder = "Receiver logs will appear here.";
-        const now = new Date().toISOString();
-        const line = `[${now}] [${(level || "debug").toUpperCase()}] ${text}`;
+        const ts = timestamp || new Date().toISOString();
+        const line = `[${ts}] [${(level || "debug").toUpperCase()}] ${text}`;
         logEl.textContent =
           logEl.textContent === placeholder
             ? line
@@ -537,9 +539,8 @@
               message.source && message.line
                 ? ` at ${message.source}:${message.line}${message.column ? ":" + message.column : ""}`
                 : "";
-            const ts = message.timestamp ? ` [${message.timestamp}]` : "";
             const text = `${message.message || "Unknown log"}${where}`;
-            appendReceiverLog(level, `${text}${ts}`);
+            appendReceiverLog(level, text, message.timestamp);
             if (message.stack) {
               appendReceiverLog(level, message.stack);
             }

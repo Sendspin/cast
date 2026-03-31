@@ -200,9 +200,9 @@ function setupGlobalErrorForwarding() {
           ? runtimeError.message
           : "Unknown error"),
       stack: runtimeError instanceof Error ? runtimeError.stack : undefined,
-      source: event.filename || undefined,
-      line: event.lineno || undefined,
-      column: event.colno || undefined,
+      source: event.filename ?? undefined,
+      line: event.lineno ?? undefined,
+      column: event.colno ?? undefined,
     });
   });
 }
