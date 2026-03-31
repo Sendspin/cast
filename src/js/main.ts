@@ -234,7 +234,8 @@ function handleFatalError(
   console.error(`Sendspin: Fatal [${context}]:`, error);
   window.setStatus?.(message);
   sendStatusToSender({ state: "error", message });
-  window.showError?.(context, error);
+  const normalizedError = error instanceof Error ? error : new Error(cause);
+  window.showError?.(context, normalizedError);
 
   clearStatusIntervals();
   resetReconnectState();
