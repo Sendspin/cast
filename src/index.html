@@ -186,6 +186,51 @@
         background: #e6f4ea;
         color: #137333;
       }
+      body.show-logs {
+        max-width: 1100px;
+        display: grid;
+        grid-template-columns: minmax(0, 500px) minmax(320px, 1fr);
+        column-gap: 20px;
+        align-items: start;
+      }
+      body.show-logs > * {
+        grid-column: 1;
+      }
+      #receiverLog {
+        display: none;
+        grid-column: 2;
+        grid-row: 1 / span 6;
+        position: sticky;
+        top: 20px;
+        margin-top: 0;
+        padding: 12px;
+        background: #111;
+        color: #f1f1f1;
+        border-radius: 8px;
+        font-size: 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+        line-height: 1.4;
+        height: calc(100vh - 80px);
+        max-height: none;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      body.show-logs #receiverLog {
+        display: block;
+      }
+      @media (max-width: 980px) {
+        body.show-logs {
+          grid-template-columns: 1fr;
+        }
+        #receiverLog {
+          grid-column: 1;
+          grid-row: auto;
+          position: static;
+          margin-top: 12px;
+          max-height: 260px;
+        }
+      }
       .sync-badge.syncing {
         background: #fef7e0;
         color: #b06000;
@@ -263,6 +308,28 @@
         >
       </div>
 
+      <div class="server-config" style="margin-top: 16px">
+        <label for="receiverLogLevel">Receiver Log Level</label>
+        <select
+          id="receiverLogLevel"
+          style="
+            padding: 10px 12px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+          "
+        >
+          <option value="off">Off</option>
+          <option value="error" selected>Error</option>
+          <option value="warn">Warn</option>
+          <option value="info">Info</option>
+          <option value="debug">Debug</option>
+        </select>
+        <small
+          >Forward receiver console output at this severity or higher.</small
+        >
+      </div>
+
       <div class="buttons">
         <button id="castBtn" onclick="startCasting()" disabled>
           Cast to Device
@@ -283,6 +350,8 @@
         >Customize App ID</a
       >
     </div>
+
+    <div id="receiverLog">Receiver logs will appear here.</div>
 
     <script>
       const DEFAULT_APP_ID = "__CAST_APP_ID__";
@@ -310,6 +379,9 @@
       if (savedCodec) {
         document.getElementById("codec").value = savedCodec;
       }
+      const savedLogLevel =
+        localStorage.getItem("sendspin_receiver_log_level") || "error";
+      document.getElementById("receiverLogLevel").value = savedLogLevel;
 
       // Dev fallback: when running locally, the placeholder is unreplaced.
       // Use a dev Cast ID so local development works without a build step.
@@ -367,8 +439,37 @@
         return [codec];
       }
 
+      document
+        .getElementById("receiverLogLevel")
+        .addEventListener("change", (e) => {
+          const level = e.target.value;
+          localStorage.setItem("sendspin_receiver_log_level", level);
+          if (castSession) {
+            castSession
+              .sendMessage(CAST_NAMESPACE, {
+                type: "config",
+                receiverLogLevel: level,
+              })
+              .catch((err) => {
+                console.error("Failed to send log level update:", err);
+              });
+          }
+        });
+
       function setStatus(text) {
         document.getElementById("status").innerHTML = text;
+      }
+
+      function appendReceiverLog(level, text, timestamp) {
+        const logEl = document.getElementById("receiverLog");
+        const placeholder = "Receiver logs will appear here.";
+        const ts = timestamp || new Date().toISOString();
+        const line = `[${ts}] [${(level || "debug").toUpperCase()}] ${text}`;
+        logEl.textContent =
+          logEl.textContent === placeholder
+            ? line
+            : `${logEl.textContent}\n${line}`;
+        logEl.scrollTop = logEl.scrollHeight;
       }
 
       function updateStatus(data) {
@@ -429,6 +530,22 @@
               message = JSON.parse(message);
             } catch (e) {}
           }
+          if (message && message.type === "receiver_log") {
+            if (!document.body.classList.contains("show-logs")) {
+              document.body.classList.add("show-logs");
+            }
+            const level = message.level || "debug";
+            const where =
+              message.source && message.line
+                ? ` at ${message.source}:${message.line}${message.column ? ":" + message.column : ""}`
+                : "";
+            const text = `${message.message || "Unknown log"}${where}`;
+            appendReceiverLog(level, text, message.timestamp);
+            if (message.stack) {
+              appendReceiverLog(level, message.stack);
+            }
+            return;
+          }
           if (message && message.state) {
             updateStatus(message);
           }
@@ -480,6 +597,8 @@
                       serverUrl,
                       syncDelay,
                       codecs,
+                      receiverLogLevel:
+                        document.getElementById("receiverLogLevel").value,
                     })
                     .catch((err) => {
                       updateStatus({
@@ -498,6 +617,7 @@
                 document.getElementById("stopBtn").disabled = true;
                 document.getElementById("castBtn").disabled = false;
                 document.getElementById("status").textContent = "Ready to cast";
+                document.body.classList.remove("show-logs");
               }
             },
           );

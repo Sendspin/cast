@@ -87,6 +87,125 @@ interface CastContextWrapper {
   stop(): void;
 }
 let castContext: CastContextWrapper | null = null;
+let hasSenderConnected = false;
+
+const LOG_LEVELS = { off: 0, error: 1, warn: 2, info: 3, debug: 4 } as const;
+type LogLevel = keyof typeof LOG_LEVELS;
+let receiverLogLevel: LogLevel = "off";
+
+type ReceiverLogPayload = {
+  type: "receiver_log";
+  level: "debug" | "info" | "warn" | "error";
+  message: string;
+  timestamp: string;
+  /* Below fields are only present for "error" events */
+  stack?: string;
+  source?: string;
+  line?: number;
+  column?: number;
+};
+
+let globalErrorForwardingInitialized = false;
+
+function sendReceiverLog(log: Omit<ReceiverLogPayload, "type" | "timestamp">) {
+  if (
+    receiverLogLevel === "off" ||
+    LOG_LEVELS[log.level] > LOG_LEVELS[receiverLogLevel] ||
+    !castContext ||
+    !hasSenderConnected
+  ) {
+    return;
+  }
+
+  const payload: ReceiverLogPayload = {
+    type: "receiver_log",
+    timestamp: new Date().toISOString(),
+    ...log,
+  };
+
+  try {
+    castContext.sendCustomMessage(CAST_NAMESPACE, undefined, payload);
+  } catch {
+    // Drop silently to avoid recursion
+  }
+}
+
+function setupGlobalErrorForwarding() {
+  if (globalErrorForwardingInitialized) {
+    return;
+  }
+  globalErrorForwardingInitialized = true;
+
+  const originalConsole = {
+    log: console.log.bind(console),
+    info: console.info.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console),
+  };
+
+  function stringifyConsoleArg(arg: unknown): string {
+    if (typeof arg === "string") {
+      return arg;
+    }
+    if (arg instanceof Error) {
+      return arg.stack || arg.message;
+    }
+    try {
+      return JSON.stringify(arg);
+    } catch {
+      return String(arg);
+    }
+  }
+
+  function forwardConsole(
+    level: ReceiverLogPayload["level"],
+    args: unknown[],
+  ): void {
+    const message =
+      args.length > 0
+        ? args.map((arg) => stringifyConsoleArg(arg)).join(" ")
+        : "(empty log)";
+    const firstError = args.find((arg): arg is Error => arg instanceof Error);
+    sendReceiverLog({
+      level,
+      message,
+      stack: firstError?.stack,
+    });
+  }
+
+  console.log = (...args: unknown[]) => {
+    originalConsole.log(...args);
+    forwardConsole("debug", args);
+  };
+  console.info = (...args: unknown[]) => {
+    originalConsole.info(...args);
+    forwardConsole("info", args);
+  };
+  console.warn = (...args: unknown[]) => {
+    originalConsole.warn(...args);
+    forwardConsole("warn", args);
+  };
+  console.error = (...args: unknown[]) => {
+    originalConsole.error(...args);
+    forwardConsole("error", args);
+  };
+
+  window.addEventListener("error", (event) => {
+    const runtimeError = event.error;
+    sendReceiverLog({
+      level: "error",
+      message:
+        event.message ||
+        (runtimeError instanceof Error
+          ? runtimeError.message
+          : "Unknown error"),
+      stack: runtimeError instanceof Error ? runtimeError.stack : undefined,
+      source: event.filename ?? undefined,
+      line: event.lineno ?? undefined,
+      column: event.colno ?? undefined,
+    });
+  });
+}
 
 let player: SendspinPlayer | undefined;
 
@@ -667,6 +786,16 @@ function handleSenderMessage(rawMessage: unknown) {
     typeof data.syncDelay === "number" ? data.syncDelay : undefined;
   const codecs = data.codecs;
 
+  if (
+    typeof data.receiverLogLevel === "string" &&
+    data.receiverLogLevel in LOG_LEVELS
+  ) {
+    receiverLogLevel = data.receiverLogLevel as LogLevel;
+    if (receiverLogLevel !== "off") {
+      setupGlobalErrorForwarding();
+    }
+  }
+
   if (Array.isArray(codecs)) {
     const filteredCodecs = codecs.filter(isCodec);
     if (filteredCodecs.length > 0) {
@@ -781,6 +910,7 @@ function tryInitCafReceiver(): boolean {
     eventType?.SENDER_CONNECTED ?? "SENDER_CONNECTED",
     () => {
       console.log("Sendspin: Sender connected");
+      hasSenderConnected = true;
     },
   );
   context.addEventListener(
@@ -788,6 +918,7 @@ function tryInitCafReceiver(): boolean {
     () => {
       console.log("Sendspin: Sender disconnected");
       window.setStatus?.("Disconnected");
+      hasSenderConnected = false;
     },
   );
   context.addEventListener(eventType?.ERROR ?? "ERROR", (event: any) => {
@@ -817,6 +948,7 @@ function tryInitCafReceiver(): boolean {
   );
 
   context.addCustomMessageListener(CAST_NAMESPACE, (event: any) => {
+    hasSenderConnected = true;
     handleSenderMessage(event?.data);
   });
 
@@ -885,11 +1017,13 @@ function tryInitLegacyReceiver(): boolean {
 
   manager.onSenderConnected = () => {
     console.log("Sendspin: Sender connected");
+    hasSenderConnected = true;
   };
 
   manager.onSenderDisconnected = () => {
     console.log("Sendspin: Sender disconnected");
     window.setStatus?.("Disconnected");
+    hasSenderConnected = false;
   };
 
   manager.onError = (event: any) => {
@@ -917,6 +1051,7 @@ function tryInitLegacyReceiver(): boolean {
   };
 
   messageBus.onMessage = (event: any) => {
+    hasSenderConnected = true;
     handleSenderMessage(event?.data);
   };
 
