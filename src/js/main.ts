@@ -481,6 +481,7 @@ function sendPlayerStatus(player: SendspinPlayer) {
 
 let receiverStarted = false;
 let preferLegacyAfterCafFailure = false;
+let loadedCafVersion: "caf-v3" | "caf-v2" | null = null;
 
 type LoadedCastSdk = "caf-v3" | "caf-v2" | "legacy";
 
@@ -508,7 +509,7 @@ async function ensureCastSdkLoaded(): Promise<LoadedCastSdk | null> {
     !preferLegacyAfterCafFailure &&
     window.cast?.framework?.CastReceiverContext
   ) {
-    return "caf-v3";
+    return loadedCafVersion ?? "caf-v3";
   }
   if (window.cast?.receiver?.CastReceiverManager) {
     return "legacy";
@@ -520,6 +521,7 @@ async function ensureCastSdkLoaded(): Promise<LoadedCastSdk | null> {
         "//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js",
       );
       if (window.cast?.framework?.CastReceiverContext) {
+        loadedCafVersion = "caf-v3";
         return "caf-v3";
       }
     } catch (error) {
@@ -531,6 +533,7 @@ async function ensureCastSdkLoaded(): Promise<LoadedCastSdk | null> {
         "//www.gstatic.com/cast/sdk/libs/caf_receiver/v2/cast_receiver_framework.js",
       );
       if (window.cast?.framework?.CastReceiverContext) {
+        loadedCafVersion = "caf-v2";
         return "caf-v2";
       }
     } catch (error) {
@@ -805,7 +808,7 @@ function tryInitLegacyReceiver(): boolean {
   };
 
   manager.onSystemVolumeChanged = (event: any) => {
-    console.log("Sendspin: System volume changed:", event?.data);
+    console.log("Sendspin: System volume changed:", event);
     const hwVol = getHardwareVolume();
     window.setVolume?.(hwVol.volume / 100, hwVol.muted);
     window.setStatus?.(currentPlayerState.isPlaying ? "Playing" : "Paused");
