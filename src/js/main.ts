@@ -480,19 +480,27 @@ function sendPlayerStatus(player: SendspinPlayer) {
 }
 
 let receiverStarted = false;
-let activeSenderId: string | undefined;
 let preferLegacyAfterCafFailure = false;
 
 type LoadedCastSdk = "caf-v3" | "caf-v2" | "legacy";
 
+const scriptCache = new Map<string, Promise<void>>();
+
 function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
+  const cached = scriptCache.get(src);
+  if (cached) return cached;
+  const promise = new Promise<void>((resolve, reject) => {
     const script = document.createElement("script");
     script.src = src;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`Failed to load ${src}`));
+    script.onerror = () => {
+      scriptCache.delete(src);
+      reject(new Error(`Failed to load ${src}`));
+    };
     document.head.appendChild(script);
   });
+  scriptCache.set(src, promise);
+  return promise;
 }
 
 async function ensureCastSdkLoaded(): Promise<LoadedCastSdk | null> {
@@ -717,7 +725,6 @@ function tryInitCafReceiver(): boolean {
   );
 
   context.addCustomMessageListener(CAST_NAMESPACE, (event: any) => {
-    activeSenderId = event?.senderId ?? activeSenderId;
     handleSenderMessage(event?.data);
   });
 
@@ -814,7 +821,6 @@ function tryInitLegacyReceiver(): boolean {
   };
 
   messageBus.onMessage = (event: any) => {
-    activeSenderId = event?.senderId ?? activeSenderId;
     handleSenderMessage(event?.data);
   };
 
@@ -830,7 +836,11 @@ function tryInitLegacyReceiver(): boolean {
 async function initCastReceiver() {
   for (let attempt = 0; attempt < MAX_INIT_RETRIES; attempt += 1) {
     const sdk = await ensureCastSdkLoaded();
-    if (sdk && (tryInitCafReceiver() || tryInitLegacyReceiver())) {
+    const started =
+      sdk === "legacy"
+        ? tryInitLegacyReceiver()
+        : sdk && (tryInitCafReceiver() || tryInitLegacyReceiver());
+    if (started) {
       console.log(`Sendspin: Using ${sdk} Cast receiver SDK`);
       return;
     }
