@@ -64,7 +64,7 @@ function isCodec(value: unknown): value is Codec {
   );
 }
 
-/** Build a full codec list with preferred codecs first, remaining default codecs after.
+/** Build a full codec list with preferred codecs first, remaining known codecs after.
  *  Opus is only included when explicitly requested by the sender. */
 function buildCodecList(preferred: Codec[]): Codec[] {
   const rest = KNOWN_CODECS.filter(
