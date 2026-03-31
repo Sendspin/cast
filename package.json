@@ -27,7 +27,7 @@
     "lint-staged": "^16.2.7",
     "prettier": "3.8.1",
     "typescript": "5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^8.0.3"
   },
   "lint-staged": {
     "*.{js,ts,cjs,mjs}": [
