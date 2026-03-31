@@ -1,9 +1,14 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - main
+      - beta
   pull_request:
     branches:
       - main
+      - beta
 
 jobs:
   build:

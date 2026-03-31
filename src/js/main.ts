@@ -48,7 +48,7 @@ const memoryStorage = {
   setItem: (key: string, value: string) => sessionStorage.set(key, value),
 };
 
-const KNOWN_CODECS = ["pcm", "flac", "opus"] as const;
+const KNOWN_CODECS = ["flac", "pcm", "opus"] as const;
 type Codec = (typeof KNOWN_CODECS)[number];
 const DEFAULT_CODECS: Codec[] = ["pcm"];
 const MAX_INIT_RETRIES = 40;
@@ -63,6 +63,15 @@ function isCodec(value: unknown): value is Codec {
     typeof value === "string" &&
     (KNOWN_CODECS as readonly string[]).includes(value)
   );
+}
+
+/** Build a full codec list with preferred codecs first, remaining known codecs after.
+ *  Opus is only included when explicitly requested by the sender. */
+function buildCodecList(preferred: Codec[]): Codec[] {
+  const rest = KNOWN_CODECS.filter(
+    (c) => c !== "opus" && !preferred.includes(c),
+  );
+  return [...preferred, ...rest];
 }
 
 // Global error handlers - use window.showError from receiver.html
@@ -331,8 +340,9 @@ async function connectToServer(
     storage: memoryStorage, // Cast doesn't support localStorage
     syncDelay: providedSyncDelay,
     bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
-    // Use codecs from sender config, default to PCM for maximum compatibility
-    codecs: providedCodecs ?? DEFAULT_CODECS,
+    // Use codecs from sender config, default to PCM for maximum compatibility.
+    // Advertise all known codecs but with the preferred one(s) first.
+    codecs: buildCodecList(providedCodecs ?? DEFAULT_CODECS),
     // Use hardware volume control (Cast system volume)
     useHardwareVolume: true,
     onVolumeCommand: setHardwareVolume,
@@ -611,7 +621,8 @@ function handleSenderMessage(rawMessage: unknown) {
     player &&
     currentPlayerCodecs &&
     providedCodecs &&
-    JSON.stringify(providedCodecs) !== JSON.stringify(currentPlayerCodecs)
+    JSON.stringify(buildCodecList(providedCodecs)) !==
+      JSON.stringify(buildCodecList(currentPlayerCodecs))
   ) {
     const targetUrl = serverUrl ?? currentServerUrl;
     if (targetUrl) {

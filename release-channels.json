@@ -1,0 +1,26 @@
+[
+  {
+    "name": "main branch",
+    "branch": "main",
+    "path": "main",
+    "castId": "FAB7FE2B"
+  },
+  {
+    "name": "beta branch",
+    "branch": "beta",
+    "path": "beta",
+    "castId": "7D69F439"
+  },
+  {
+    "name": "ma-2.8 branch",
+    "branch": "ma-2.8",
+    "path": "ma-2.8",
+    "castId": "938CBF87"
+  },
+  {
+    "name": "ma-2.8 branch (fallback, delete later)",
+    "branch": "ma-2.8",
+    "path": ".",
+    "castId": "938CBF87"
+  }
+]
