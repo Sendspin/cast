@@ -231,7 +231,7 @@ function handleFatalError(
 
   const cause = toErrorMessage(error);
   const message = `${summary} Cause: ${cause}`;
-  console.error(`Sendspin Fatal [${context}]:`, error);
+  console.error(`Sendspin: Fatal [${context}]:`, error);
   window.setStatus?.(message);
   sendStatusToSender({ state: "error", message });
   window.showError?.(context, error);
@@ -273,7 +273,7 @@ window.onerror = (message, source, lineno, colno, error) => {
     fullError,
     "Receiver encountered a fatal runtime error.",
   );
-  return true;
+  return false;
 };
 
 window.onunhandledrejection = (event) => {
