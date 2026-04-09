@@ -272,21 +272,6 @@
       </div>
 
       <div class="server-config" style="margin-top: 16px">
-        <label for="syncDelay">Sync Delay (ms)</label>
-        <input
-          type="number"
-          id="syncDelay"
-          placeholder="0"
-          value="0"
-          style="width: 100px"
-        />
-        <small
-          >Positive delays playback, negative advances it. Changes apply
-          instantly.</small
-        >
-      </div>
-
-      <div class="server-config" style="margin-top: 16px">
         <label for="codec">Audio Codec</label>
         <select
           id="codec"
@@ -305,6 +290,28 @@
           >FLAC offers good compression with lossless quality. Opus provides
           better compression but may have compatibility issues on some Cast
           devices. PCM is uncompressed and uses more bandwidth.</small
+        >
+      </div>
+
+      <div class="server-config" style="margin-top: 16px">
+        <label for="syncDelay">Sync Delay (ms)</label>
+        <input
+          type="number"
+          id="syncDelay"
+          min="0"
+          max="5000"
+          step="10"
+          value="330"
+          style="
+            padding: 10px 12px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+          "
+        />
+        <small
+          >Delay in milliseconds to compensate for equipment latency. Higher
+          values make this device play earlier.</small
         >
       </div>
 
@@ -358,6 +365,7 @@
       const CAST_NAMESPACE = "urn:x-cast:sendspin";
       let castContext = null;
       let castSession = null;
+      const syncDelayInput = document.getElementById("syncDelay");
 
       // Check if running on localhost
       const isLocalhost = ["localhost", "127.0.0.1", ""].includes(
@@ -371,14 +379,11 @@
       if (savedIp) {
         document.getElementById("serverIp").value = savedIp;
       }
-      const savedSyncDelay = localStorage.getItem("sendspin_sync_delay");
-      if (savedSyncDelay) {
-        document.getElementById("syncDelay").value = savedSyncDelay;
-      }
       const savedCodec = localStorage.getItem("sendspin_codec");
       if (savedCodec) {
         document.getElementById("codec").value = savedCodec;
       }
+      const savedDelay = localStorage.getItem("sendspin_static_delay");
       const savedLogLevel =
         localStorage.getItem("sendspin_receiver_log_level") || "error";
       document.getElementById("receiverLogLevel").value = savedLogLevel;
@@ -426,18 +431,40 @@
         return url;
       }
 
-      function getSyncDelay() {
-        const delay =
-          parseInt(document.getElementById("syncDelay").value, 10) || 0;
-        localStorage.setItem("sendspin_sync_delay", delay.toString());
-        return delay;
-      }
-
       function getCodecs() {
         const codec = document.getElementById("codec").value;
         localStorage.setItem("sendspin_codec", codec);
         return [codec];
       }
+
+      function normalizeSyncDelay(value) {
+        const parsed =
+          typeof value === "number" ? value : parseInt(String(value), 10);
+        return Math.max(0, Math.min(5000, isNaN(parsed) ? 330 : parsed));
+      }
+
+      function getSyncDelay() {
+        const clamped = normalizeSyncDelay(syncDelayInput.value);
+        syncDelayInput.value = String(clamped);
+        localStorage.setItem("sendspin_static_delay", String(clamped));
+        return clamped;
+      }
+
+      syncDelayInput.value = String(normalizeSyncDelay(savedDelay));
+
+      syncDelayInput.addEventListener("change", () => {
+        const syncDelay = getSyncDelay();
+        if (castSession) {
+          castSession
+            .sendMessage(CAST_NAMESPACE, {
+              type: "config",
+              syncDelay,
+            })
+            .catch((err) => {
+              console.error("Failed to send delay update:", err);
+            });
+        }
+      });
 
       document
         .getElementById("receiverLogLevel")
@@ -530,6 +557,15 @@
               message = JSON.parse(message);
             } catch (e) {}
           }
+          if (
+            message &&
+            message.type === "config" &&
+            typeof message.syncDelay === "number"
+          ) {
+            const syncDelay = normalizeSyncDelay(message.syncDelay);
+            syncDelayInput.value = String(syncDelay);
+            localStorage.setItem("sendspin_static_delay", String(syncDelay));
+          }
           if (message && message.type === "receiver_log") {
             if (!document.body.classList.contains("show-logs")) {
               document.body.classList.add("show-logs");
@@ -584,7 +620,6 @@
 
                 // Send server URL and config to receiver
                 const serverUrl = getServerUrl();
-                const syncDelay = getSyncDelay();
                 const codecs = getCodecs();
                 if (serverUrl) {
                   updateStatus({
@@ -595,8 +630,8 @@
                     .sendMessage(CAST_NAMESPACE, {
                       type: "config",
                       serverUrl,
-                      syncDelay,
                       codecs,
+                      syncDelay: getSyncDelay(),
                       receiverLogLevel:
                         document.getElementById("receiverLogLevel").value,
                     })
@@ -653,16 +688,6 @@
           castSession.endSession(true);
         }
       }
-
-      // Live update sync delay when changed during active session
-      document.getElementById("syncDelay").addEventListener("input", () => {
-        if (!castSession) return;
-        const syncDelay = getSyncDelay();
-        castSession
-          .sendMessage(CAST_NAMESPACE, { type: "config", syncDelay })
-          .then(() => console.log("Sent sync delay update:", syncDelay))
-          .catch((err) => console.error("Failed to send sync delay:", err));
-      });
     </script>
   </body>
 </html>

@@ -260,11 +260,11 @@ function sendStatusToSender(status: {
   }
 }
 
-// Player ID, name, sync delay, and codecs provided by the sender (Music Assistant server)
+// Player ID, name, codecs, and sync delay provided by the sender
 let providedPlayerId: string | null = null;
 let providedPlayerName: string | null = null;
-let providedSyncDelay: number = 0;
 let providedCodecs: Codec[] | null = null;
+let providedSyncDelay: number = 0;
 
 // Track current connection settings (for detecting changes that require reconnect)
 let currentServerUrl: string | null = null;
@@ -531,6 +531,15 @@ async function connectToServer(
       // Use hardware volume control (Cast system volume)
       useHardwareVolume: true,
       onVolumeCommand: setHardwareVolume,
+      onDelayCommand: (delayMs: number) => {
+        providedSyncDelay = delayMs;
+        if (castContext) {
+          castContext.sendCustomMessage(CAST_NAMESPACE, undefined, {
+            type: "config",
+            syncDelay: delayMs,
+          });
+        }
+      },
       getExternalVolume: getHardwareVolume,
       useOutputLatencyCompensation: true,
       onStateChange: (state) => {
