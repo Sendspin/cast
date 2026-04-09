@@ -7,8 +7,8 @@
     "dev": "vite",
     "build": "rm -rf dist && vite build",
     "preview": "vite preview",
-    "lint": "eslint . --fix --ignore-path .gitignore",
-    "lint:check": "eslint . --ignore-path .gitignore",
+    "lint": "eslint . --fix",
+    "lint:check": "eslint .",
     "prettier:check": "prettier --check .",
     "prepare": "husky"
   },
@@ -17,17 +17,17 @@
   },
   "devDependencies": {
     "@types/chromecast-caf-receiver": "^6.0.25",
-    "@types/node": "^25.3.3",
+    "@types/node": "^25.5.0",
     "@typescript-eslint/eslint-plugin": "8.56.0",
-    "@typescript-eslint/parser": "8.56.0",
-    "eslint": "8.57.1",
+    "@typescript-eslint/parser": "8.57.1",
+    "eslint": "10.1.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-prettier": "5.5.5",
     "husky": "^9.1.7",
-    "lint-staged": "^16.2.7",
+    "lint-staged": "^16.4.0",
     "prettier": "3.8.1",
     "typescript": "5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^8.0.3"
   },
   "lint-staged": {
     "*.{js,ts,cjs,mjs}": [

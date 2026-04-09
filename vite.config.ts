@@ -11,6 +11,9 @@ export default defineConfig({
     extensions: [".js", ".json", ".ts"],
   },
   build: {
+    // Cast devices can run older Chromium runtimes. Keep syntax conservative
+    // so the receiver app can parse and boot on legacy firmware.
+    target: "chrome80",
     outDir: resolve(__dirname, "dist"),
     emptyOutDir: true,
     rollupOptions: {

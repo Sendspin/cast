@@ -19,6 +19,7 @@ declare global {
     setStatus?: (text: string) => void;
     setPlaybackState?: (isPlaying: boolean) => void;
     setDebug?: (text: string) => void;
+    cast?: any;
     setNowPlaying?: (metadata: NowPlayingMetadata | null) => void;
     setVolume?: (level: number, muted: boolean) => void;
     setProgress?: (currentSeconds: number, totalSeconds: number) => void;
@@ -47,7 +48,7 @@ const memoryStorage = {
   setItem: (key: string, value: string) => sessionStorage.set(key, value),
 };
 
-const KNOWN_CODECS = ["pcm", "flac", "opus"] as const;
+const KNOWN_CODECS = ["flac", "pcm", "opus"] as const;
 type Codec = (typeof KNOWN_CODECS)[number];
 const DEFAULT_CODECS: Codec[] = ["pcm"];
 const MAX_INIT_RETRIES = 40;
@@ -64,28 +65,147 @@ function isCodec(value: unknown): value is Codec {
   );
 }
 
-// Global error handlers - use window.showError from receiver.html
-window.onerror = (message, source, lineno, colno, error) => {
-  const fullError =
-    error || new Error(`${message} at ${source}:${lineno}:${colno}`);
-  window.showError?.("JavaScript Error", fullError);
-  return false;
-};
-window.onunhandledrejection = (event) => {
-  window.showError?.("Unhandled Promise Rejection", event.reason);
+/** Build a full codec list with preferred codecs first, remaining known codecs after.
+ *  Opus is only included when explicitly requested by the sender. */
+function buildCodecList(preferred: Codec[]): Codec[] {
+  const rest = KNOWN_CODECS.filter(
+    (c) => c !== "opus" && !preferred.includes(c),
+  );
+  return [...preferred, ...rest];
+}
+
+// Unified wrapper so CAF and legacy receiver paths expose the same API.
+interface CastContextWrapper {
+  getSystemVolume(): SystemVolumeData | null;
+  setSystemVolumeLevel(level: number): void;
+  setSystemVolumeMuted(muted: boolean): void;
+  sendCustomMessage(
+    namespace: string,
+    senderId: string | undefined,
+    data: unknown,
+  ): void;
+  stop(): void;
+}
+let castContext: CastContextWrapper | null = null;
+let hasSenderConnected = false;
+
+const LOG_LEVELS = { off: 0, error: 1, warn: 2, info: 3, debug: 4 } as const;
+type LogLevel = keyof typeof LOG_LEVELS;
+let receiverLogLevel: LogLevel = "off";
+
+type ReceiverLogPayload = {
+  type: "receiver_log";
+  level: "debug" | "info" | "warn" | "error";
+  message: string;
+  timestamp: string;
+  /* Below fields are only present for "error" events */
+  stack?: string;
+  source?: string;
+  line?: number;
+  column?: number;
 };
 
-// Cast context type - extends SDK type with volume methods missing from @types
-// Methods are optional as they may not exist on all Cast devices/SDK versions
-type CastReceiverContext = ReturnType<
-  typeof cast.framework.CastReceiverContext.getInstance
-> & {
-  // These methods exist in SDK but are missing from @types/chromecast-caf-receiver
-  getSystemVolume?(): SystemVolumeData | null;
-  setSystemVolumeLevel?(level: number): void;
-  setSystemVolumeMuted?(muted: boolean): void;
-};
-let castContext: CastReceiverContext | null = null;
+let globalErrorForwardingInitialized = false;
+
+function sendReceiverLog(log: Omit<ReceiverLogPayload, "type" | "timestamp">) {
+  if (
+    receiverLogLevel === "off" ||
+    LOG_LEVELS[log.level] > LOG_LEVELS[receiverLogLevel] ||
+    !castContext ||
+    !hasSenderConnected
+  ) {
+    return;
+  }
+
+  const payload: ReceiverLogPayload = {
+    type: "receiver_log",
+    timestamp: new Date().toISOString(),
+    ...log,
+  };
+
+  try {
+    castContext.sendCustomMessage(CAST_NAMESPACE, undefined, payload);
+  } catch {
+    // Drop silently to avoid recursion
+  }
+}
+
+function setupGlobalErrorForwarding() {
+  if (globalErrorForwardingInitialized) {
+    return;
+  }
+  globalErrorForwardingInitialized = true;
+
+  const originalConsole = {
+    log: console.log.bind(console),
+    info: console.info.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console),
+  };
+
+  function stringifyConsoleArg(arg: unknown): string {
+    if (typeof arg === "string") {
+      return arg;
+    }
+    if (arg instanceof Error) {
+      return arg.stack || arg.message;
+    }
+    try {
+      return JSON.stringify(arg);
+    } catch {
+      return String(arg);
+    }
+  }
+
+  function forwardConsole(
+    level: ReceiverLogPayload["level"],
+    args: unknown[],
+  ): void {
+    const message =
+      args.length > 0
+        ? args.map((arg) => stringifyConsoleArg(arg)).join(" ")
+        : "(empty log)";
+    const firstError = args.find((arg): arg is Error => arg instanceof Error);
+    sendReceiverLog({
+      level,
+      message,
+      stack: firstError?.stack,
+    });
+  }
+
+  console.log = (...args: unknown[]) => {
+    originalConsole.log(...args);
+    forwardConsole("debug", args);
+  };
+  console.info = (...args: unknown[]) => {
+    originalConsole.info(...args);
+    forwardConsole("info", args);
+  };
+  console.warn = (...args: unknown[]) => {
+    originalConsole.warn(...args);
+    forwardConsole("warn", args);
+  };
+  console.error = (...args: unknown[]) => {
+    originalConsole.error(...args);
+    forwardConsole("error", args);
+  };
+
+  window.addEventListener("error", (event) => {
+    const runtimeError = event.error;
+    sendReceiverLog({
+      level: "error",
+      message:
+        event.message ||
+        (runtimeError instanceof Error
+          ? runtimeError.message
+          : "Unknown error"),
+      stack: runtimeError instanceof Error ? runtimeError.stack : undefined,
+      source: event.filename ?? undefined,
+      line: event.lineno ?? undefined,
+      column: event.colno ?? undefined,
+    });
+  });
+}
 
 let player: SendspinPlayer | undefined;
 
@@ -164,6 +284,29 @@ let reconnectTimerId: ReturnType<typeof setTimeout> | null = null;
 let isReconnectInProgress = false;
 // Monotonic token: only the latest connect attempt may finalize state.
 let connectGeneration = 0;
+let fatalShutdownInitiated = false;
+
+// Track current player state for periodic updates
+let currentPlayerState: {
+  isPlaying: boolean;
+} = { isPlaying: false };
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message || error.name;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
 
 function clearReconnectTimer() {
   if (reconnectTimerId !== null) {
@@ -194,13 +337,24 @@ function getReconnectDelayMs(attempt: number): number {
   return Math.min(exponential, RECONNECT_MAX_DELAY_MS);
 }
 
-function stopCastAppAfterReconnectExhausted() {
+function handleFatalError(
+  context: string,
+  error: unknown,
+  summary = "Receiver encountered a fatal error.",
+) {
+  if (fatalShutdownInitiated) {
+    return;
+  }
+  fatalShutdownInitiated = true;
   connectGeneration += 1;
 
-  const message = "Reconnect limit reached; stopping cast app.";
-  console.error("Sendspin:", message);
+  const cause = toErrorMessage(error);
+  const message = `${summary} Cause: ${cause}`;
+  console.error(`Sendspin: Fatal [${context}]:`, error);
   window.setStatus?.(message);
   sendStatusToSender({ state: "error", message });
+  const normalizedError = error instanceof Error ? error : new Error(cause);
+  window.showError?.(context, normalizedError);
 
   clearStatusIntervals();
   resetReconnectState();
@@ -215,6 +369,48 @@ function stopCastAppAfterReconnectExhausted() {
   setTimeout(() => {
     castContext?.stop();
   }, STOP_AFTER_ERROR_DELAY_MS);
+}
+
+function ensureAudioContextSupported(): boolean {
+  if (typeof AudioContext !== "undefined") {
+    return true;
+  }
+
+  handleFatalError(
+    "Audio Setup",
+    new Error("AudioContext is not implemented on this device"),
+    "Audio output is not supported on this Cast device.",
+  );
+  return false;
+}
+
+// Global error handlers route unexpected failures through fatal shutdown path.
+window.onerror = (message, source, lineno, colno, error) => {
+  const fullError =
+    error || new Error(`${message} at ${source}:${lineno}:${colno}`);
+  handleFatalError(
+    "JavaScript Error",
+    fullError,
+    "Receiver encountered a fatal runtime error.",
+  );
+  return false;
+};
+
+window.onunhandledrejection = (event) => {
+  handleFatalError(
+    "Unhandled Promise Rejection",
+    event.reason,
+    "Receiver encountered a fatal runtime error.",
+  );
+  event.preventDefault();
+};
+
+function stopCastAppAfterReconnectExhausted() {
+  handleFatalError(
+    "Reconnect Exhausted",
+    new Error("Reconnect limit reached"),
+    "Reconnect limit reached; stopping cast app.",
+  );
 }
 
 // Generate or get player ID (persisted in localStorage)
@@ -279,11 +475,6 @@ function updateProgressBar(player: SendspinPlayer) {
   window.setProgress?.(progress.positionMs / 1000, progress.durationMs / 1000);
 }
 
-// Track current player state for periodic updates
-let currentPlayerState: {
-  isPlaying: boolean;
-} = { isPlaying: false };
-
 // Connect to Sendspin server
 async function connectToServer(
   baseUrl: string,
@@ -318,68 +509,85 @@ async function connectToServer(
   // Use provided name or default
   const clientName = providedPlayerName || "Music Assistant Cast Receiver";
 
-  const newPlayer = new SendspinPlayer({
-    playerId,
-    baseUrl,
-    clientName,
-    correctionMode: "sync", // Explicit sync mode for multi-device playback
-    storage: memoryStorage, // Cast doesn't support localStorage
-    syncDelay: providedSyncDelay,
-    bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
-    // Use codecs from sender config, default to PCM for maximum compatibility
-    codecs: providedCodecs ?? DEFAULT_CODECS,
-    // Use hardware volume control (Cast system volume)
-    useHardwareVolume: true,
-    onVolumeCommand: setHardwareVolume,
-    onDelayCommand: (delayMs: number) => {
-      providedSyncDelay = delayMs;
-      if (castContext) {
-        castContext.sendCustomMessage(CAST_NAMESPACE, undefined, {
-          type: "config",
-          syncDelay: delayMs,
-        });
-      }
-    },
-    getExternalVolume: getHardwareVolume,
-    useOutputLatencyCompensation: true,
-    onStateChange: (state) => {
-      currentPlayerState = {
-        isPlaying: state.isPlaying,
-      };
-      const hwVol = getHardwareVolume();
+  console.log("Sendspin: Using sync delay:", providedSyncDelay, "ms");
 
-      // Update status and playback state
-      window.setStatus?.(state.isPlaying ? "Playing" : "Paused");
-      window.setPlaybackState?.(state.isPlaying);
+  if (!ensureAudioContextSupported()) {
+    return false;
+  }
 
-      // Update volume display (including muted state)
-      window.setVolume?.(hwVol.volume / 100, hwVol.muted);
-
-      // Update now playing UI
-      if (state.serverState.metadata) {
-        window.setNowPlaying?.(
-          toNowPlayingMetadata(state.serverState.metadata),
-        );
-
-        // Start progress interval if not running
-        if (!progressIntervalId) {
-          progressIntervalId = setInterval(() => {
-            updateProgressBar(newPlayer);
-          }, 200);
+  let newPlayer: SendspinPlayer;
+  try {
+    newPlayer = new SendspinPlayer({
+      playerId,
+      baseUrl,
+      clientName,
+      correctionMode: "sync", // Explicit sync mode for multi-device playback
+      storage: memoryStorage, // Cast doesn't support localStorage
+      syncDelay: providedSyncDelay,
+      bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
+      // Use codecs from sender config, default to PCM for maximum compatibility.
+      // Advertise all known codecs but with the preferred one(s) first.
+      codecs: buildCodecList(providedCodecs ?? DEFAULT_CODECS),
+      // Use hardware volume control (Cast system volume)
+      useHardwareVolume: true,
+      onVolumeCommand: setHardwareVolume,
+      onDelayCommand: (delayMs: number) => {
+        providedSyncDelay = delayMs;
+        if (castContext) {
+          castContext.sendCustomMessage(CAST_NAMESPACE, undefined, {
+            type: "config",
+            syncDelay: delayMs,
+          });
         }
-      } else {
-        window.setNowPlaying?.(null);
-        window.setProgress?.(0, 0);
-        if (progressIntervalId) {
-          clearInterval(progressIntervalId);
-          progressIntervalId = null;
-        }
-      }
+      },
+      getExternalVolume: getHardwareVolume,
+      useOutputLatencyCompensation: true,
+      onStateChange: (state) => {
+        currentPlayerState = {
+          isPlaying: state.isPlaying,
+        };
+        const hwVol = getHardwareVolume();
 
-      sendPlayerStatus(newPlayer);
-      updateDebug(newPlayer);
-    },
-  });
+        // Update status and playback state
+        window.setStatus?.(state.isPlaying ? "Playing" : "Paused");
+        window.setPlaybackState?.(state.isPlaying);
+
+        // Update volume display (including muted state)
+        window.setVolume?.(hwVol.volume / 100, hwVol.muted);
+
+        // Update now playing UI
+        if (state.serverState.metadata) {
+          window.setNowPlaying?.(
+            toNowPlayingMetadata(state.serverState.metadata),
+          );
+
+          // Start progress interval if not running
+          if (!progressIntervalId) {
+            progressIntervalId = setInterval(() => {
+              updateProgressBar(newPlayer);
+            }, 200);
+          }
+        } else {
+          window.setNowPlaying?.(null);
+          window.setProgress?.(0, 0);
+          if (progressIntervalId) {
+            clearInterval(progressIntervalId);
+            progressIntervalId = null;
+          }
+        }
+
+        sendPlayerStatus(newPlayer);
+        updateDebug(newPlayer);
+      },
+    });
+  } catch (error) {
+    handleFatalError(
+      "Player Setup",
+      error,
+      "Failed to initialize the audio player on this device.",
+    );
+    return false;
+  }
 
   try {
     await newPlayer.connect();
@@ -484,26 +692,168 @@ function sendPlayerStatus(player: SendspinPlayer) {
 }
 
 let receiverStarted = false;
+let preferLegacyAfterCafFailure = false;
+let loadedCafVersion: "caf-v3" | "caf-v2" | null = null;
 
-// Try to initialize Cast Receiver (returns true on success)
-function tryInitCastReceiver(): boolean {
-  if (receiverStarted) {
-    return true;
+type LoadedCastSdk = "caf-v3" | "caf-v2" | "legacy";
+
+const scriptCache = new Map<string, Promise<void>>();
+
+function loadScript(src: string): Promise<void> {
+  const cached = scriptCache.get(src);
+  if (cached) return cached;
+  const promise = new Promise<void>((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      scriptCache.delete(src);
+      reject(new Error(`Failed to load ${src}`));
+    };
+    document.head.appendChild(script);
+  });
+  scriptCache.set(src, promise);
+  return promise;
+}
+
+async function ensureCastSdkLoaded(): Promise<LoadedCastSdk | null> {
+  if (
+    !preferLegacyAfterCafFailure &&
+    window.cast?.framework?.CastReceiverContext
+  ) {
+    return loadedCafVersion ?? "caf-v3";
+  }
+  if (window.cast?.receiver?.CastReceiverManager) {
+    return "legacy";
   }
 
-  // cast is a global from the Cast SDK script - check if loaded
-  const castFramework =
-    typeof cast !== "undefined" ? cast.framework : undefined;
-  const context = castFramework?.CastReceiverContext?.getInstance();
-  if (!castFramework || !context) {
-    return false;
+  if (!preferLegacyAfterCafFailure) {
+    try {
+      await loadScript(
+        "//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js",
+      );
+      if (window.cast?.framework?.CastReceiverContext) {
+        loadedCafVersion = "caf-v3";
+        return "caf-v3";
+      }
+    } catch (error) {
+      console.warn("Sendspin: CAF v3 load failed, trying CAF v2", error);
+    }
+
+    try {
+      await loadScript(
+        "//www.gstatic.com/cast/sdk/libs/caf_receiver/v2/cast_receiver_framework.js",
+      );
+      if (window.cast?.framework?.CastReceiverContext) {
+        loadedCafVersion = "caf-v2";
+        return "caf-v2";
+      }
+    } catch (error) {
+      console.warn(
+        "Sendspin: CAF v2 load failed, trying legacy receiver API",
+        error,
+      );
+    }
   }
-  receiverStarted = true;
 
-  // Store context for sending messages back to sender
-  // Cast to our extended type (SDK has methods missing from @types)
-  castContext = context as CastReceiverContext;
+  try {
+    await loadScript(
+      "//www.gstatic.com/cast/sdk/libs/receiver/2.0.0/cast_receiver.js",
+    );
+    if (window.cast?.receiver?.CastReceiverManager) {
+      return "legacy";
+    }
+  } catch (error) {
+    console.warn("Sendspin: Legacy Cast Receiver API load failed", error);
+  }
 
+  return null;
+}
+
+function handleSenderMessage(rawMessage: unknown) {
+  if (!rawMessage) {
+    return;
+  }
+  let message = rawMessage;
+  if (typeof message === "string") {
+    try {
+      message = JSON.parse(message);
+    } catch {
+      return;
+    }
+  }
+  console.log("Sendspin: Received message from sender:", message);
+
+  const data = message as Record<string, unknown>;
+  const serverUrl =
+    typeof data.serverUrl === "string" ? data.serverUrl : undefined;
+  const playerId =
+    typeof data.playerId === "string" ? data.playerId : undefined;
+  const playerName =
+    typeof data.playerName === "string" ? data.playerName : undefined;
+  const syncDelay =
+    typeof data.syncDelay === "number" ? data.syncDelay : undefined;
+  const codecs = data.codecs;
+
+  if (
+    typeof data.receiverLogLevel === "string" &&
+    data.receiverLogLevel in LOG_LEVELS
+  ) {
+    receiverLogLevel = data.receiverLogLevel as LogLevel;
+    if (receiverLogLevel !== "off") {
+      setupGlobalErrorForwarding();
+    }
+  }
+
+  if (Array.isArray(codecs)) {
+    const filteredCodecs = codecs.filter(isCodec);
+    if (filteredCodecs.length > 0) {
+      providedCodecs = filteredCodecs;
+      console.log("Sendspin: Using codecs from sender:", filteredCodecs);
+    }
+  }
+  if (playerId) {
+    providedPlayerId = playerId;
+    console.log("Sendspin: Using player ID from sender:", playerId);
+  }
+  if (playerName) {
+    providedPlayerName = playerName;
+    console.log("Sendspin: Using player name from sender:", playerName);
+  }
+  if (syncDelay !== undefined) {
+    providedSyncDelay = syncDelay;
+    console.log("Sendspin: Using sync delay from sender:", syncDelay, "ms");
+    if (player) {
+      player.setSyncDelay(syncDelay);
+      console.log("Sendspin: Updated sync delay on existing player");
+    }
+  }
+
+  if (
+    player &&
+    currentPlayerCodecs &&
+    providedCodecs &&
+    JSON.stringify(buildCodecList(providedCodecs)) !==
+      JSON.stringify(buildCodecList(currentPlayerCodecs))
+  ) {
+    const targetUrl = serverUrl ?? currentServerUrl;
+    if (targetUrl) {
+      console.log("Sendspin: Codecs changed, reconnecting...");
+      void connectToServer(targetUrl);
+    }
+    return;
+  }
+
+  if (serverUrl && serverUrl !== currentServerUrl) {
+    void connectToServer(serverUrl);
+  }
+}
+
+let keydownListenerAdded = false;
+
+function installKeydownHandler() {
+  if (keydownListenerAdded) return;
+  keydownListenerAdded = true;
   // Handle remote control keys (OK for play/pause, left/right for skip)
   document.addEventListener("keydown", (event) => {
     switch (event.key) {
@@ -526,24 +876,77 @@ function tryInitCastReceiver(): boolean {
         break;
     }
   });
+}
 
-  console.log("Sendspin: Initializing Cast Receiver...");
+// Try to initialize CAF receiver APIs first.
+function tryInitCafReceiver(): boolean {
+  if (receiverStarted) {
+    return true;
+  }
+
+  const context = window.cast?.framework?.CastReceiverContext?.getInstance?.();
+  if (!context) {
+    return false;
+  }
+  receiverStarted = true;
+
+  castContext = {
+    getSystemVolume: () => (context as any).getSystemVolume?.() ?? null,
+    setSystemVolumeLevel: (level: number) =>
+      (context as any).setSystemVolumeLevel?.(level),
+    setSystemVolumeMuted: (muted: boolean) =>
+      (context as any).setSystemVolumeMuted?.(muted),
+    sendCustomMessage: (
+      namespace: string,
+      senderId: string | undefined,
+      data: unknown,
+    ) => {
+      context.sendCustomMessage(namespace, senderId, data);
+    },
+    stop: () => (context as any).stop?.(),
+  };
+
+  installKeydownHandler();
+
+  console.log("Sendspin: Initializing CAF receiver...");
   window.setStatus?.("Waiting for sender...");
 
-  // Listen for system (hardware) volume changes
+  const eventType = window.cast?.framework?.system?.EventType;
+  context.addEventListener(eventType?.READY ?? "READY", () => {
+    console.log("Sendspin: Cast receiver READY");
+  });
   context.addEventListener(
-    castFramework.system.EventType.SYSTEM_VOLUME_CHANGED,
-    (event) => {
-      const volumeData = event.data as SystemVolumeData;
-      console.log("Sendspin: System volume changed:", volumeData);
+    eventType?.SENDER_CONNECTED ?? "SENDER_CONNECTED",
+    () => {
+      console.log("Sendspin: Sender connected");
+      hasSenderConnected = true;
+    },
+  );
+  context.addEventListener(
+    eventType?.SENDER_DISCONNECTED ?? "SENDER_DISCONNECTED",
+    () => {
+      console.log("Sendspin: Sender disconnected");
+      window.setStatus?.("Disconnected");
+      hasSenderConnected = false;
+    },
+  );
+  context.addEventListener(eventType?.ERROR ?? "ERROR", (event: any) => {
+    handleFatalError(
+      "Cast Framework Error",
+      event,
+      "Cast receiver reported a fatal framework error.",
+    );
+  });
+  context.addEventListener(
+    eventType?.SYSTEM_VOLUME_CHANGED ?? "SYSTEM_VOLUME_CHANGED",
+    (event: any) => {
+      console.log("Sendspin: System volume changed:", event?.data);
       const hwVol = getHardwareVolume();
       window.setVolume?.(hwVol.volume / 100, hwVol.muted);
       window.setStatus?.(currentPlayerState.isPlaying ? "Playing" : "Paused");
-      // Send volume update to sender
       if (player) {
         sendPlayerStatus(player);
       } else {
-        // No player yet, send basic volume update
         sendStatusToSender({
           state: "connected",
           volume: hwVol.volume,
@@ -553,106 +956,142 @@ function tryInitCastReceiver(): boolean {
     },
   );
 
-  // Cast event listeners
-  context.addEventListener(castFramework.system.EventType.READY, () => {
-    console.log("Sendspin: Cast receiver READY");
+  context.addCustomMessageListener(CAST_NAMESPACE, (event: any) => {
+    hasSenderConnected = true;
+    handleSenderMessage(event?.data);
   });
 
-  context.addEventListener(
-    castFramework.system.EventType.SENDER_CONNECTED,
-    () => {
-      console.log("Sendspin: Sender connected");
-    },
-  );
-
-  context.addEventListener(
-    castFramework.system.EventType.SENDER_DISCONNECTED,
-    () => {
-      console.log("Sendspin: Sender disconnected");
-      window.setStatus?.("Disconnected");
-    },
-  );
-
-  context.addEventListener(castFramework.system.EventType.ERROR, (event) => {
-    console.error("Sendspin: Cast error:", event);
-  });
-
-  // Listen for custom messages with server URL, player ID, name, and codecs
-  context.addCustomMessageListener(CAST_NAMESPACE, (event) => {
-    console.log("Sendspin: Received message from sender:", event.data);
-    if (!event.data) {
-      return;
-    }
-
-    // type = "config"
-    const serverUrl = event.data.serverUrl;
-    const playerId = event.data.playerId;
-    const playerName = event.data.playerName;
-    const codecs = event.data.codecs;
-
-    if (Array.isArray(codecs) && codecs.every(isCodec)) {
-      providedCodecs = codecs;
-      console.log("Sendspin: Using codecs from sender:", codecs);
-    }
-    if (playerId) {
-      // Store the player ID provided by Music Assistant
-      providedPlayerId = playerId;
-      console.log("Sendspin: Using player ID from sender:", playerId);
-    }
-    if (playerName) {
-      // Store the player name provided by Music Assistant
-      providedPlayerName = playerName;
-      console.log("Sendspin: Using player name from sender:", playerName);
-    }
-    const syncDelay = event.data.syncDelay;
-    if (typeof syncDelay === "number" && syncDelay >= 0 && syncDelay <= 5000) {
-      providedSyncDelay = syncDelay;
-      if (player) {
-        player.setSyncDelay(syncDelay);
-      }
-    }
-    // Check if codecs changed on an existing player - requires reconnect
-    if (
-      player &&
-      currentPlayerCodecs &&
-      providedCodecs &&
-      // Check for actual changes in codecs
-      JSON.stringify(providedCodecs) !== JSON.stringify(currentPlayerCodecs)
-    ) {
-      const targetUrl = serverUrl ?? currentServerUrl;
-      if (targetUrl) {
-        console.log("Sendspin: Codecs changed, reconnecting...");
-        connectToServer(targetUrl);
-      }
-      return;
-    }
-
-    if (serverUrl && serverUrl !== currentServerUrl) {
-      connectToServer(serverUrl);
-    }
-  });
-
-  // Start the Cast receiver with options
-  const options = new castFramework.CastReceiverOptions();
-  options.disableIdleTimeout = true;
-  options.maxInactivity = 3600; // 1 hour max inactivity
-
-  context.start(options);
-  console.log("Sendspin: Cast Receiver started");
+  const startOptions: Record<string, unknown> = {
+    statusText: "Ready to play",
+    disableIdleTimeout: true,
+    maxInactivity: 3600,
+  };
+  const messageType = window.cast?.framework?.system?.MessageType?.JSON;
+  if (messageType) {
+    startOptions.customNamespaces = {
+      [CAST_NAMESPACE]: messageType,
+    };
+  }
+  try {
+    context.start(startOptions);
+  } catch (error) {
+    console.error("Sendspin: CAF receiver start failed, falling back", error);
+    castContext = null;
+    receiverStarted = false;
+    preferLegacyAfterCafFailure = true;
+    return false;
+  }
+  console.log("Sendspin: CAF Receiver started");
 
   return true;
 }
 
-function initCastReceiverWithRetry(attempt = 0) {
-  if (tryInitCastReceiver()) {
-    return;
+// Try to initialize legacy Cast Receiver API (fallback)
+function tryInitLegacyReceiver(): boolean {
+  if (receiverStarted) {
+    return true;
   }
-  if (attempt >= MAX_INIT_RETRIES) {
-    console.log("Sendspin: Cast SDK not available");
-    window.setStatus?.("Not running in a Cast receiver context");
-    return;
+
+  const receiverApi = window.cast?.receiver;
+  const manager = receiverApi?.CastReceiverManager?.getInstance?.();
+  const messageBus = manager?.getCastMessageBus?.(CAST_NAMESPACE);
+  if (!receiverApi || !manager || !messageBus) {
+    return false;
   }
-  setTimeout(() => initCastReceiverWithRetry(attempt + 1), RETRY_DELAY_MS);
+  receiverStarted = true;
+
+  castContext = {
+    getSystemVolume: () => (manager as any).getSystemVolume?.() ?? null,
+    setSystemVolumeLevel: (level: number) =>
+      (manager as any).setSystemVolumeLevel?.(level),
+    setSystemVolumeMuted: (muted: boolean) =>
+      (manager as any).setSystemVolumeMuted?.(muted),
+    sendCustomMessage: (
+      _namespace: string,
+      _senderId: string | undefined,
+      data: unknown,
+    ) => {
+      const payload = typeof data === "string" ? data : JSON.stringify(data);
+      messageBus.broadcast(payload);
+    },
+    stop: () => (manager as any).stop?.(),
+  };
+  installKeydownHandler();
+  console.log("Sendspin: Initializing legacy Cast Receiver...");
+  window.setStatus?.("Waiting for sender...");
+
+  manager.onReady = () => {
+    console.log("Sendspin: Cast receiver READY");
+  };
+
+  manager.onSenderConnected = () => {
+    console.log("Sendspin: Sender connected");
+    hasSenderConnected = true;
+  };
+
+  manager.onSenderDisconnected = () => {
+    console.log("Sendspin: Sender disconnected");
+    window.setStatus?.("Disconnected");
+    hasSenderConnected = false;
+  };
+
+  manager.onError = (event: any) => {
+    handleFatalError(
+      "Cast Framework Error",
+      event,
+      "Cast receiver reported a fatal framework error.",
+    );
+  };
+
+  manager.onSystemVolumeChanged = (event: any) => {
+    console.log("Sendspin: System volume changed:", event);
+    const hwVol = getHardwareVolume();
+    window.setVolume?.(hwVol.volume / 100, hwVol.muted);
+    window.setStatus?.(currentPlayerState.isPlaying ? "Playing" : "Paused");
+    if (player) {
+      sendPlayerStatus(player);
+    } else {
+      sendStatusToSender({
+        state: "connected",
+        volume: hwVol.volume,
+        muted: hwVol.muted,
+      });
+    }
+  };
+
+  messageBus.onMessage = (event: any) => {
+    hasSenderConnected = true;
+    handleSenderMessage(event?.data);
+  };
+
+  manager.start({
+    statusText: "Ready to play",
+    maxInactivity: 3600,
+  });
+  console.log("Sendspin: Legacy Cast Receiver started");
+
+  return true;
 }
 
-initCastReceiverWithRetry();
+async function initCastReceiver() {
+  for (let attempt = 0; attempt < MAX_INIT_RETRIES; attempt += 1) {
+    const sdk = await ensureCastSdkLoaded();
+    const started =
+      sdk === "legacy"
+        ? tryInitLegacyReceiver()
+        : sdk && (tryInitCafReceiver() || tryInitLegacyReceiver());
+    if (started) {
+      console.log(`Sendspin: Using ${sdk} Cast receiver SDK`);
+      return;
+    }
+
+    if (attempt < MAX_INIT_RETRIES - 1) {
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
+
+  console.log("Sendspin: Cast SDK not available");
+  window.setStatus?.("Not running in a Cast receiver context");
+}
+
+void initCastReceiver();

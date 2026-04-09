@@ -1,8 +1,6 @@
 name: Deploy to GitHub Pages
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -18,19 +16,62 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          path: main
 
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
           node-version: 20
-          cache: yarn
 
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
+      - name: Build all channels
+        run: |
+          set -euo pipefail
+          mkdir -p staging
 
-      - name: Build
-        run: yarn build
+          # Read channels from main's release-channels.json
+          channels=$(cat main/release-channels.json)
+          count=$(echo "$channels" | jq length)
+
+          for i in $(seq 0 $(( count - 1 ))); do
+            name=$(echo "$channels" | jq -r ".[$i].name")
+            branch=$(echo "$channels" | jq -r ".[$i].branch")
+            path=$(echo "$channels" | jq -r ".[$i].path")
+            cast_id=$(echo "$channels" | jq -r ".[$i].castId")
+
+            echo "::group::Building channel: $name (branch: $branch, path: $path)"
+
+            # Checkout the channel branch
+            git clone --depth 1 --branch "$branch" \
+              "https://github.com/${{ github.repository }}.git" \
+              "channel-$name"
+
+            cd "channel-$name"
+
+            # Inject Cast ID into source files
+            sed -i "s/__CAST_APP_ID__/$cast_id/g" src/index.html
+
+            # Install dependencies and build
+            yarn install --frozen-lockfile
+            yarn build
+
+            # Copy build output to staging directory
+            if [ "$path" = "." ]; then
+              cp -r dist/* ../staging/
+            else
+              mkdir -p "../staging/$path"
+              cp -r dist/* "../staging/$path/"
+            fi
+
+            cd ..
+            echo "::endgroup::"
+          done
+
+          echo "Staging directory contents:"
+          find staging -type f | head -50
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -38,7 +79,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: dist
+          path: staging
 
   deploy:
     environment:
@@ -49,4 +90,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
