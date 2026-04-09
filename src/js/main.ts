@@ -260,7 +260,7 @@ function sendStatusToSender(status: {
   }
 }
 
-// Player ID, name, and codecs provided by the sender (Music Assistant server)
+// Player ID, name, codecs, and sync delay provided by the sender
 let providedPlayerId: string | null = null;
 let providedPlayerName: string | null = null;
 let providedCodecs: Codec[] | null = null;

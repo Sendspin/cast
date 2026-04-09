@@ -365,6 +365,7 @@
       const CAST_NAMESPACE = "urn:x-cast:sendspin";
       let castContext = null;
       let castSession = null;
+      const syncDelayInput = document.getElementById("syncDelay");
 
       // Check if running on localhost
       const isLocalhost = ["localhost", "127.0.0.1", ""].includes(
@@ -383,9 +384,6 @@
         document.getElementById("codec").value = savedCodec;
       }
       const savedDelay = localStorage.getItem("sendspin_static_delay");
-      if (savedDelay) {
-        document.getElementById("syncDelay").value = savedDelay;
-      }
       const savedLogLevel =
         localStorage.getItem("sendspin_receiver_log_level") || "error";
       document.getElementById("receiverLogLevel").value = savedLogLevel;
@@ -439,19 +437,28 @@
         return [codec];
       }
 
+      function normalizeSyncDelay(value) {
+        const parsed =
+          typeof value === "number" ? value : parseInt(String(value), 10);
+        return Math.max(0, Math.min(5000, isNaN(parsed) ? 330 : parsed));
+      }
+
       function getSyncDelay() {
-        const val = parseInt(document.getElementById("syncDelay").value, 10);
-        const clamped = Math.max(0, Math.min(5000, isNaN(val) ? 330 : val));
+        const clamped = normalizeSyncDelay(syncDelayInput.value);
+        syncDelayInput.value = String(clamped);
         localStorage.setItem("sendspin_static_delay", String(clamped));
         return clamped;
       }
 
-      document.getElementById("syncDelay").addEventListener("change", () => {
+      syncDelayInput.value = String(normalizeSyncDelay(savedDelay));
+
+      syncDelayInput.addEventListener("change", () => {
+        const syncDelay = getSyncDelay();
         if (castSession) {
           castSession
             .sendMessage(CAST_NAMESPACE, {
               type: "config",
-              syncDelay: getSyncDelay(),
+              syncDelay,
             })
             .catch((err) => {
               console.error("Failed to send delay update:", err);
@@ -555,11 +562,9 @@
             message.type === "config" &&
             typeof message.syncDelay === "number"
           ) {
-            document.getElementById("syncDelay").value = message.syncDelay;
-            localStorage.setItem(
-              "sendspin_static_delay",
-              String(message.syncDelay),
-            );
+            const syncDelay = normalizeSyncDelay(message.syncDelay);
+            syncDelayInput.value = String(syncDelay);
+            localStorage.setItem("sendspin_static_delay", String(syncDelay));
           }
           if (message && message.type === "receiver_log") {
             if (!document.body.classList.contains("show-logs")) {
