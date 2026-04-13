@@ -464,8 +464,10 @@
         );
       };
 
+      var _lastPlaybackPlaying = null;
       window.setPlaybackState = function (isPlaying) {
-        // Update playback icon based on playing state
+        if (_lastPlaybackPlaying === isPlaying) return;
+        _lastPlaybackPlaying = isPlaying;
         window.setPlaybackIcon(isPlaying);
       };
 
@@ -546,8 +548,12 @@
         }
       };
 
+      var _lastVolumeLevel = null;
+      var _lastVolumeMuted = null;
       window.setVolume = function (level, muted) {
-        // level is 0-1, muted is boolean
+        if (_lastVolumeLevel === level && _lastVolumeMuted === muted) return;
+        _lastVolumeLevel = level;
+        _lastVolumeMuted = muted;
         var percent = Math.round(level * 100);
         volumeFill.style.width = percent + "%";
         if (muted) {
