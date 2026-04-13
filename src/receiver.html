@@ -478,9 +478,24 @@
         document.getElementById("debug").textContent = text;
       };
 
+      var _lastNowPlaying = {
+        title: null,
+        artist: null,
+        album: null,
+        artworkUrl: null,
+        isNull: true,
+      };
+
       window.setNowPlaying = function (metadata) {
         if (!metadata) {
-          // Show idle state, hide playing state
+          if (_lastNowPlaying.isNull) return;
+          _lastNowPlaying = {
+            title: null,
+            artist: null,
+            album: null,
+            artworkUrl: null,
+            isNull: true,
+          };
           idleContainer.style.display = "flex";
           mainContent.classList.add("hidden");
           progressSection.classList.add("hidden");
@@ -488,25 +503,42 @@
           return;
         }
 
-        // Hide idle state, show playing state
+        var title = metadata.title || "-";
+        var artist = metadata.artist || "-";
+        var album = metadata.album || "";
+        var artworkUrl = metadata.artworkUrl || null;
+
+        if (
+          !_lastNowPlaying.isNull &&
+          _lastNowPlaying.title === title &&
+          _lastNowPlaying.artist === artist &&
+          _lastNowPlaying.album === album &&
+          _lastNowPlaying.artworkUrl === artworkUrl
+        ) {
+          return;
+        }
+
+        _lastNowPlaying = {
+          title: title,
+          artist: artist,
+          album: album,
+          artworkUrl: artworkUrl,
+          isNull: false,
+        };
+
         idleContainer.style.display = "none";
         mainContent.classList.remove("hidden");
         progressSection.classList.remove("hidden");
 
-        // Update track info
-        trackTitle.textContent = metadata.title || "-";
-        trackArtist.textContent = metadata.artist || "-";
-        trackAlbum.textContent = metadata.album || "";
+        trackTitle.textContent = title;
+        trackArtist.textContent = artist;
+        trackAlbum.textContent = album;
+        albumRow.style.display = album ? "flex" : "none";
 
-        // Hide album row if no album
-        albumRow.style.display = metadata.album ? "flex" : "none";
-
-        // Update artwork and background
-        if (metadata.artworkUrl) {
-          artwork.src = metadata.artworkUrl;
+        if (artworkUrl) {
+          artwork.src = artworkUrl;
           artwork.style.display = "block";
-          background.style.backgroundImage =
-            "url('" + metadata.artworkUrl + "')";
+          background.style.backgroundImage = "url('" + artworkUrl + "')";
           background.style.display = "block";
         } else {
           artwork.style.display = "none";
