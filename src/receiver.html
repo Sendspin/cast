@@ -41,24 +41,12 @@
         background: #121212;
       }
 
-      .background {
-        position: fixed;
-        inset: -50px;
-        background-size: cover;
-        background-position: center;
-        filter: blur(80px) saturate(1.2) brightness(0.35);
-        transform: scale(1.2);
-        z-index: -1;
-        display: none;
-      }
-
       .top-bar {
         display: flex;
         align-items: center;
         justify-content: space-between;
         padding: 0 var(--spacing-lg);
         background: rgba(0, 0, 0, 0.7);
-        backdrop-filter: blur(10px);
         z-index: 10;
       }
 
@@ -325,8 +313,6 @@
       <div class="error-meta" id="error-meta">-</div>
     </div>
 
-    <div class="background" id="background"></div>
-
     <div class="top-bar">
       <div class="debug-line" id="debug"></div>
       <div class="branding">Sendspin</div>
@@ -406,8 +392,6 @@
       var idleStatus = document.getElementById("idle-status");
       var mainContent = document.getElementById("main-content");
       var progressSection = document.getElementById("progress-section");
-      var background = document.getElementById("background");
-
       // Error overlay elements
       var errorOverlay = document.getElementById("error-overlay");
       var errorContext = document.getElementById("error-context");
@@ -501,7 +485,6 @@
           idleContainer.style.display = "flex";
           mainContent.classList.add("hidden");
           progressSection.classList.add("hidden");
-          background.style.display = "none";
           return;
         }
 
@@ -540,11 +523,8 @@
         if (artworkUrl) {
           artwork.src = artworkUrl;
           artwork.style.display = "block";
-          background.style.backgroundImage = "url('" + artworkUrl + "')";
-          background.style.display = "block";
         } else {
           artwork.style.display = "none";
-          background.style.display = "none";
         }
       };
 
