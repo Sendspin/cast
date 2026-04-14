@@ -424,7 +424,7 @@ async function connectToServer(
           if (!progressIntervalId) {
             progressIntervalId = setInterval(() => {
               updateProgressBar(newPlayer);
-            }, 200);
+            }, 1000);
           }
         } else {
           window.setNowPlaying?.(null);

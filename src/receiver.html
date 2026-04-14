@@ -42,24 +42,12 @@
         background: #121212;
       }
 
-      .background {
-        position: fixed;
-        inset: -50px;
-        background-size: cover;
-        background-position: center;
-        filter: blur(80px) saturate(1.2) brightness(0.35);
-        transform: scale(1.2);
-        z-index: -1;
-        display: none;
-      }
-
       .top-bar {
         display: flex;
         align-items: center;
         justify-content: space-between;
         padding: 0 var(--spacing-lg);
         background: rgba(0, 0, 0, 0.7);
-        backdrop-filter: blur(10px);
         z-index: 10;
       }
 
@@ -207,7 +195,7 @@
         width: 0%;
         background: var(--bar-fill);
         border-radius: 3px;
-        transition: width 0.1s linear;
+        transition: width 1s linear;
       }
 
       .progress-time {
@@ -326,8 +314,6 @@
       <div class="error-meta" id="error-meta">-</div>
     </div>
 
-    <div class="background" id="background"></div>
-
     <div class="top-bar">
       <div class="debug-line" id="debug"></div>
       <div class="branding">Sendspin</div>
@@ -407,8 +393,6 @@
       var idleStatus = document.getElementById("idle-status");
       var mainContent = document.getElementById("main-content");
       var progressSection = document.getElementById("progress-section");
-      var background = document.getElementById("background");
-
       // Error overlay elements
       var errorOverlay = document.getElementById("error-overlay");
       var errorContext = document.getElementById("error-context");
@@ -465,8 +449,10 @@
         );
       };
 
+      var _lastPlaybackPlaying = null;
       window.setPlaybackState = function (isPlaying) {
-        // Update playback icon based on playing state
+        if (_lastPlaybackPlaying === isPlaying) return;
+        _lastPlaybackPlaying = isPlaying;
         window.setPlaybackIcon(isPlaying);
       };
 
@@ -479,44 +465,76 @@
         document.getElementById("debug").textContent = text;
       };
 
+      var _lastNowPlaying = {
+        title: null,
+        artist: null,
+        album: null,
+        artworkUrl: null,
+        isNull: true,
+      };
+
       window.setNowPlaying = function (metadata) {
         if (!metadata) {
-          // Show idle state, hide playing state
+          if (_lastNowPlaying.isNull) return;
+          _lastNowPlaying = {
+            title: null,
+            artist: null,
+            album: null,
+            artworkUrl: null,
+            isNull: true,
+          };
           idleContainer.style.display = "flex";
           mainContent.classList.add("hidden");
           progressSection.classList.add("hidden");
-          background.style.display = "none";
           return;
         }
 
-        // Hide idle state, show playing state
+        var title = metadata.title || "-";
+        var artist = metadata.artist || "-";
+        var album = metadata.album || "";
+        var artworkUrl = metadata.artworkUrl || null;
+
+        if (
+          !_lastNowPlaying.isNull &&
+          _lastNowPlaying.title === title &&
+          _lastNowPlaying.artist === artist &&
+          _lastNowPlaying.album === album &&
+          _lastNowPlaying.artworkUrl === artworkUrl
+        ) {
+          return;
+        }
+
+        _lastNowPlaying = {
+          title: title,
+          artist: artist,
+          album: album,
+          artworkUrl: artworkUrl,
+          isNull: false,
+        };
+
         idleContainer.style.display = "none";
         mainContent.classList.remove("hidden");
         progressSection.classList.remove("hidden");
 
-        // Update track info
-        trackTitle.textContent = metadata.title || "-";
-        trackArtist.textContent = metadata.artist || "-";
-        trackAlbum.textContent = metadata.album || "";
+        trackTitle.textContent = title;
+        trackArtist.textContent = artist;
+        trackAlbum.textContent = album;
+        albumRow.style.display = album ? "flex" : "none";
 
-        // Hide album row if no album
-        albumRow.style.display = metadata.album ? "flex" : "none";
-
-        // Update artwork and background
-        if (metadata.artworkUrl) {
-          artwork.src = metadata.artworkUrl;
+        if (artworkUrl) {
+          artwork.src = artworkUrl;
           artwork.style.display = "block";
-          background.style.backgroundImage =
-            "url('" + metadata.artworkUrl + "')";
-          background.style.display = "block";
         } else {
           artwork.style.display = "none";
-          background.style.display = "none";
         }
       };
 
+      var _lastVolumeLevel = null;
+      var _lastVolumeMuted = null;
       window.setVolume = function (level, muted) {
-        // level is 0-1, muted is boolean
+        if (_lastVolumeLevel === level && _lastVolumeMuted === muted) return;
+        _lastVolumeLevel = level;
+        _lastVolumeMuted = muted;
         var percent = Math.round(level * 100);
         volumeFill.style.width = percent + "%";
         if (muted) {
