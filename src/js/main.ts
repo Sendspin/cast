@@ -1,4 +1,5 @@
 import { SendspinPlayer, ServerStateMetadata } from "@sendspin/sendspin-js";
+import errorAudioUrl from "../assets/error-incompatible.mp3";
 
 // Manual type - @types/chromecast-caf-receiver is missing volume methods
 // Matches cast.framework.system.SystemVolumeData from the actual SDK
@@ -346,9 +347,23 @@ function handleFatalError(
   }, STOP_AFTER_ERROR_DELAY_MS);
 }
 
-function ensureAudioContextSupported(): boolean {
+async function ensureAudioContextSupported(): Promise<boolean> {
   if (typeof AudioContext !== "undefined") {
     return true;
+  }
+
+  // Play TTS error message via <audio> element (works without AudioContext).
+  try {
+    const audio = new Audio(errorAudioUrl);
+    const playbackDone = new Promise<void>((resolve) => {
+      audio.onended = () => resolve();
+      audio.onerror = () => resolve();
+      setTimeout(resolve, 15000); // safety timeout
+    });
+    await audio.play();
+    await playbackDone;
+  } catch {
+    // Audio playback failed — proceed with fatal error anyway.
   }
 
   handleFatalError(
@@ -470,7 +485,7 @@ async function connectToServer(baseUrl: string): Promise<boolean> {
 
   console.log("Sendspin: Using sync delay:", providedSyncDelay, "ms");
 
-  if (!ensureAudioContextSupported()) {
+  if (!(await ensureAudioContextSupported())) {
     return false;
   }
 
