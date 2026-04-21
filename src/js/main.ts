@@ -53,9 +53,6 @@ type Codec = (typeof KNOWN_CODECS)[number];
 const DEFAULT_CODECS: Codec[] = ["pcm"];
 const MAX_INIT_RETRIES = 40;
 const RETRY_DELAY_MS = 250;
-const RECONNECT_BASE_DELAY_MS = 1000;
-const RECONNECT_MAX_DELAY_MS = 15000;
-const MAX_RECONNECT_ATTEMPTS = 7;
 const STOP_AFTER_ERROR_DELAY_MS = 1000;
 
 function isCodec(value: unknown): value is Codec {
@@ -276,11 +273,9 @@ let statusIntervalId: ReturnType<typeof setInterval> | null = null;
 // Track progress update interval for real-time progress bar updates
 let progressIntervalId: ReturnType<typeof setInterval> | null = null;
 
-// Reconnect supervisor state
+// Track runtime reconnect state for UI updates.
 let hadSuccessfulConnection = false;
 let lastKnownConnected = false;
-let reconnectAttempt = 0;
-let reconnectTimerId: ReturnType<typeof setTimeout> | null = null;
 let isReconnectInProgress = false;
 // Monotonic token: only the latest connect attempt may finalize state.
 let connectGeneration = 0;
@@ -308,13 +303,6 @@ function toErrorMessage(error: unknown): string {
   return String(error);
 }
 
-function clearReconnectTimer() {
-  if (reconnectTimerId !== null) {
-    clearTimeout(reconnectTimerId);
-    reconnectTimerId = null;
-  }
-}
-
 function clearStatusIntervals() {
   if (statusIntervalId !== null) {
     clearInterval(statusIntervalId);
@@ -324,17 +312,6 @@ function clearStatusIntervals() {
     clearInterval(progressIntervalId);
     progressIntervalId = null;
   }
-}
-
-function resetReconnectState() {
-  isReconnectInProgress = false;
-  reconnectAttempt = 0;
-  clearReconnectTimer();
-}
-
-function getReconnectDelayMs(attempt: number): number {
-  const exponential = RECONNECT_BASE_DELAY_MS * 2 ** (attempt - 1);
-  return Math.min(exponential, RECONNECT_MAX_DELAY_MS);
 }
 
 function handleFatalError(
@@ -357,7 +334,7 @@ function handleFatalError(
   window.showError?.(context, normalizedError);
 
   clearStatusIntervals();
-  resetReconnectState();
+  isReconnectInProgress = false;
   lastKnownConnected = false;
   currentPlayerState = { isPlaying: false };
 
@@ -404,14 +381,6 @@ window.onunhandledrejection = (event) => {
   );
   event.preventDefault();
 };
-
-function stopCastAppAfterReconnectExhausted() {
-  handleFatalError(
-    "Reconnect Exhausted",
-    new Error("Reconnect limit reached"),
-    "Reconnect limit reached; stopping cast app.",
-  );
-}
 
 // Generate or get player ID (persisted in localStorage)
 function getPlayerId(): string {
@@ -476,16 +445,10 @@ function updateProgressBar(player: SendspinPlayer) {
 }
 
 // Connect to Sendspin server
-async function connectToServer(
-  baseUrl: string,
-  options: { fromReconnect?: boolean } = {},
-): Promise<boolean> {
+async function connectToServer(baseUrl: string): Promise<boolean> {
   // Claim connect ownership for this invocation.
   const generation = ++connectGeneration;
-
-  if (!options.fromReconnect) {
-    resetReconnectState();
-  }
+  isReconnectInProgress = false;
 
   // Cleanup existing player and intervals before creating new one
   clearStatusIntervals();
@@ -543,6 +506,9 @@ async function connectToServer(
       getExternalVolume: getHardwareVolume,
       useOutputLatencyCompensation: true,
       onStateChange: (state) => {
+        if (generation !== connectGeneration) {
+          return;
+        }
         currentPlayerState = {
           isPlaying: state.isPlaying,
         };
@@ -601,7 +567,6 @@ async function connectToServer(
     player = newPlayer;
     hadSuccessfulConnection = true;
     lastKnownConnected = true;
-    resetReconnectState();
     sendStatusToSender({ state: "connected", message: "Ready to play" });
 
     // Track current connection settings for change detection (only on success)
@@ -610,24 +575,31 @@ async function connectToServer(
 
     // Periodically send status to sender
     statusIntervalId = setInterval(() => {
+      if (generation !== connectGeneration || player !== newPlayer) {
+        return;
+      }
+
       const connectedNow = newPlayer.isConnected;
       if (!connectedNow) {
-        if (
-          hadSuccessfulConnection &&
-          lastKnownConnected &&
-          !isReconnectInProgress &&
-          currentServerUrl
-        ) {
-          console.warn("Sendspin: Runtime connection lost, starting reconnect");
+        if (hadSuccessfulConnection && lastKnownConnected) {
+          console.warn("Sendspin: Reconnecting...");
           isReconnectInProgress = true;
-          clearStatusIntervals();
           currentPlayerState = { isPlaying: false };
-          newPlayer.disconnect("restart");
-          player = undefined;
           lastKnownConnected = false;
-          scheduleReconnect(currentServerUrl);
+          window.setStatus?.("Reconnecting...");
+          sendStatusToSender({
+            state: "connecting",
+            message: "Connection lost. Reconnecting...",
+          });
         }
         return;
+      }
+
+      if (isReconnectInProgress || !lastKnownConnected) {
+        console.log("Sendspin: Runtime connection restored");
+        isReconnectInProgress = false;
+        window.setStatus?.("Ready to play");
+        sendStatusToSender({ state: "connected", message: "Ready to play" });
       }
 
       lastKnownConnected = true;
@@ -640,41 +612,12 @@ async function connectToServer(
       return true;
     }
 
+    isReconnectInProgress = false;
     console.error("Sendspin: Connection failed:", error);
-    if (!options.fromReconnect) {
-      window.setStatus?.("Connection failed");
-      sendStatusToSender({ state: "error", message: "Connection failed" });
-    }
+    window.setStatus?.("Connection failed");
+    sendStatusToSender({ state: "error", message: "Connection failed" });
     return false;
   }
-}
-
-function scheduleReconnect(baseUrl: string) {
-  if (!isReconnectInProgress) {
-    return;
-  }
-
-  if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
-    stopCastAppAfterReconnectExhausted();
-    return;
-  }
-
-  const attempt = reconnectAttempt + 1;
-  reconnectAttempt = attempt;
-  const delayMs = getReconnectDelayMs(attempt);
-  const delaySeconds = Math.floor(delayMs / 1000);
-  const message = `Connection lost. Reconnecting in ${delaySeconds}s (attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS})...`;
-
-  window.setStatus?.(message);
-  sendStatusToSender({ state: "connecting", message });
-
-  reconnectTimerId = setTimeout(async () => {
-    reconnectTimerId = null;
-    const connected = await connectToServer(baseUrl, { fromReconnect: true });
-    if (!connected) {
-      scheduleReconnect(baseUrl);
-    }
-  }, delayMs);
 }
 
 // Send current player status to sender
