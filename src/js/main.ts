@@ -277,10 +277,6 @@ let statusIntervalId: ReturnType<typeof setInterval> | null = null;
 // Track progress update interval for real-time progress bar updates
 let progressIntervalId: ReturnType<typeof setInterval> | null = null;
 
-// Track runtime reconnect state for UI updates.
-let hadSuccessfulConnection = false;
-let lastKnownConnected = false;
-let isReconnectInProgress = false;
 // Monotonic token: only the latest connect attempt may finalize state.
 let connectGeneration = 0;
 let fatalShutdownInitiated = false;
@@ -338,8 +334,6 @@ function handleFatalError(
   window.showError?.(context, normalizedError);
 
   clearStatusIntervals();
-  isReconnectInProgress = false;
-  lastKnownConnected = false;
   currentPlayerState = { isPlaying: false };
 
   if (player) {
@@ -452,11 +446,9 @@ function updateProgressBar(player: SendspinPlayer) {
 async function connectToServer(baseUrl: string): Promise<boolean> {
   // Claim connect ownership for this invocation.
   const generation = ++connectGeneration;
-  isReconnectInProgress = false;
 
   // Cleanup existing player and intervals before creating new one
   clearStatusIntervals();
-  lastKnownConnected = false;
   currentPlayerState = { isPlaying: false };
   if (player) {
     console.log("Sendspin: Disconnecting existing player before reconnect");
@@ -518,8 +510,6 @@ async function connectToServer(baseUrl: string): Promise<boolean> {
             return;
           }
           const message = `Reconnecting (attempt ${attempt}/${RECONNECT_MAX_ATTEMPTS})...`;
-          isReconnectInProgress = true;
-          lastKnownConnected = false;
           currentPlayerState = { isPlaying: false };
           window.setStatus?.(message);
           sendStatusToSender({ state: "connecting", message });
@@ -529,8 +519,6 @@ async function connectToServer(baseUrl: string): Promise<boolean> {
             return;
           }
           console.log("Sendspin: Reconnected");
-          isReconnectInProgress = false;
-          lastKnownConnected = true;
           window.setStatus?.("Ready to play");
           sendStatusToSender({ state: "connected", message: "Ready to play" });
         },
@@ -607,8 +595,6 @@ async function connectToServer(baseUrl: string): Promise<boolean> {
     console.log("Sendspin: Connected - ready to play");
     window.setStatus?.("Ready to play");
     player = newPlayer;
-    hadSuccessfulConnection = true;
-    lastKnownConnected = true;
     sendStatusToSender({ state: "connected", message: "Ready to play" });
 
     // Track current connection settings for change detection (only on success)
@@ -623,7 +609,6 @@ async function connectToServer(baseUrl: string): Promise<boolean> {
       if (!newPlayer.isConnected) {
         return;
       }
-      lastKnownConnected = true;
       updateDebug(newPlayer);
       sendPlayerStatus(newPlayer);
     }, 1000);
@@ -633,7 +618,6 @@ async function connectToServer(baseUrl: string): Promise<boolean> {
       return true;
     }
 
-    isReconnectInProgress = false;
     console.error("Sendspin: Connection failed:", error);
     window.setStatus?.("Connection failed");
     sendStatusToSender({ state: "error", message: "Connection failed" });
