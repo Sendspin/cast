@@ -54,6 +54,10 @@ const DEFAULT_CODECS: Codec[] = ["pcm"];
 const MAX_INIT_RETRIES = 40;
 const RETRY_DELAY_MS = 250;
 const STOP_AFTER_ERROR_DELAY_MS = 1000;
+// Give up after ~60s (1s, 2s, 4s, 8s, 15s, 15s, 15s).
+const RECONNECT_BASE_DELAY_MS = 1000;
+const RECONNECT_MAX_DELAY_MS = 15000;
+const RECONNECT_MAX_ATTEMPTS = 7;
 
 function isCodec(value: unknown): value is Codec {
   return (
@@ -505,6 +509,44 @@ async function connectToServer(baseUrl: string): Promise<boolean> {
       },
       getExternalVolume: getHardwareVolume,
       useOutputLatencyCompensation: true,
+      reconnect: {
+        baseDelayMs: RECONNECT_BASE_DELAY_MS,
+        maxDelayMs: RECONNECT_MAX_DELAY_MS,
+        maxAttempts: RECONNECT_MAX_ATTEMPTS,
+        onReconnecting: (attempt) => {
+          if (generation !== connectGeneration) {
+            return;
+          }
+          const message = `Reconnecting (attempt ${attempt}/${RECONNECT_MAX_ATTEMPTS})...`;
+          isReconnectInProgress = true;
+          lastKnownConnected = false;
+          currentPlayerState = { isPlaying: false };
+          window.setStatus?.(message);
+          sendStatusToSender({ state: "connecting", message });
+        },
+        onReconnected: () => {
+          if (generation !== connectGeneration) {
+            return;
+          }
+          console.log("Sendspin: Reconnected");
+          isReconnectInProgress = false;
+          lastKnownConnected = true;
+          window.setStatus?.("Ready to play");
+          sendStatusToSender({ state: "connected", message: "Ready to play" });
+        },
+        onExhausted: () => {
+          if (generation !== connectGeneration) {
+            return;
+          }
+          handleFatalError(
+            "Reconnect Exhausted",
+            new Error(
+              `Reconnect limit reached (${RECONNECT_MAX_ATTEMPTS} attempts)`,
+            ),
+            "Reconnect limit reached; stopping cast app.",
+          );
+        },
+      },
       onStateChange: (state) => {
         if (generation !== connectGeneration) {
           return;
@@ -573,35 +615,14 @@ async function connectToServer(baseUrl: string): Promise<boolean> {
     currentServerUrl = baseUrl;
     currentPlayerCodecs = providedCodecs ?? DEFAULT_CODECS;
 
-    // Periodically send status to sender
+    // Push debug/status while connected; library callbacks own reconnect UI.
     statusIntervalId = setInterval(() => {
       if (generation !== connectGeneration || player !== newPlayer) {
         return;
       }
-
-      const connectedNow = newPlayer.isConnected;
-      if (!connectedNow) {
-        if (hadSuccessfulConnection && lastKnownConnected) {
-          console.warn("Sendspin: Reconnecting...");
-          isReconnectInProgress = true;
-          currentPlayerState = { isPlaying: false };
-          lastKnownConnected = false;
-          window.setStatus?.("Reconnecting...");
-          sendStatusToSender({
-            state: "connecting",
-            message: "Connection lost. Reconnecting...",
-          });
-        }
+      if (!newPlayer.isConnected) {
         return;
       }
-
-      if (isReconnectInProgress || !lastKnownConnected) {
-        console.log("Sendspin: Runtime connection restored");
-        isReconnectInProgress = false;
-        window.setStatus?.("Ready to play");
-        sendStatusToSender({ state: "connected", message: "Ready to play" });
-      }
-
       lastKnownConnected = true;
       updateDebug(newPlayer);
       sendPlayerStatus(newPlayer);
