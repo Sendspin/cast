@@ -511,7 +511,15 @@ async function connectToServer(baseUrl: string): Promise<boolean> {
           }
           const message = `Reconnecting (attempt ${attempt}/${RECONNECT_MAX_ATTEMPTS})...`;
           currentPlayerState = { isPlaying: false };
+          // Clear stale UI; library won't fire onStateChange while disconnected.
           window.setStatus?.(message);
+          window.setPlaybackState?.(false);
+          window.setNowPlaying?.(null);
+          window.setProgress?.(0, 0);
+          if (progressIntervalId) {
+            clearInterval(progressIntervalId);
+            progressIntervalId = null;
+          }
           sendStatusToSender({ state: "connecting", message });
         },
         onReconnected: () => {
