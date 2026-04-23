@@ -64,17 +64,6 @@ function isCodec(value: unknown): value is Codec {
   );
 }
 
-// Global error handlers - use window.showError from receiver.html
-window.onerror = (message, source, lineno, colno, error) => {
-  const fullError =
-    error || new Error(`${message} at ${source}:${lineno}:${colno}`);
-  window.showError?.("JavaScript Error", fullError);
-  return false;
-};
-window.onunhandledrejection = (event) => {
-  window.showError?.("Unhandled Promise Rejection", event.reason);
-};
-
 // Cast context type - extends SDK type with volume methods missing from @types
 // Methods are optional as they may not exist on all Cast devices/SDK versions
 type CastReceiverContext = ReturnType<
@@ -164,6 +153,29 @@ let reconnectTimerId: ReturnType<typeof setTimeout> | null = null;
 let isReconnectInProgress = false;
 // Monotonic token: only the latest connect attempt may finalize state.
 let connectGeneration = 0;
+let fatalShutdownInitiated = false;
+
+// Track current player state for periodic updates
+let currentPlayerState: {
+  isPlaying: boolean;
+} = { isPlaying: false };
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message || error.name;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
 
 function clearReconnectTimer() {
   if (reconnectTimerId !== null) {
@@ -194,13 +206,24 @@ function getReconnectDelayMs(attempt: number): number {
   return Math.min(exponential, RECONNECT_MAX_DELAY_MS);
 }
 
-function stopCastAppAfterReconnectExhausted() {
+function handleFatalError(
+  context: string,
+  error: unknown,
+  summary = "Receiver encountered a fatal error.",
+) {
+  if (fatalShutdownInitiated) {
+    return;
+  }
+  fatalShutdownInitiated = true;
   connectGeneration += 1;
 
-  const message = "Reconnect limit reached; stopping cast app.";
-  console.error("Sendspin:", message);
+  const cause = toErrorMessage(error);
+  const message = `${summary} Cause: ${cause}`;
+  console.error(`Sendspin: Fatal [${context}]:`, error);
   window.setStatus?.(message);
   sendStatusToSender({ state: "error", message });
+  const normalizedError = error instanceof Error ? error : new Error(cause);
+  window.showError?.(context, normalizedError);
 
   clearStatusIntervals();
   resetReconnectState();
@@ -215,6 +238,48 @@ function stopCastAppAfterReconnectExhausted() {
   setTimeout(() => {
     castContext?.stop();
   }, STOP_AFTER_ERROR_DELAY_MS);
+}
+
+function ensureAudioContextSupported(): boolean {
+  if (typeof AudioContext !== "undefined") {
+    return true;
+  }
+
+  handleFatalError(
+    "Audio Setup",
+    new Error("AudioContext is not implemented on this device"),
+    "Audio output is not supported on this Cast device.",
+  );
+  return false;
+}
+
+// Global error handlers route unexpected failures through fatal shutdown path.
+window.onerror = (message, source, lineno, colno, error) => {
+  const fullError =
+    error || new Error(`${message} at ${source}:${lineno}:${colno}`);
+  handleFatalError(
+    "JavaScript Error",
+    fullError,
+    "Receiver encountered a fatal runtime error.",
+  );
+  return false;
+};
+
+window.onunhandledrejection = (event) => {
+  handleFatalError(
+    "Unhandled Promise Rejection",
+    event.reason,
+    "Receiver encountered a fatal runtime error.",
+  );
+  event.preventDefault();
+};
+
+function stopCastAppAfterReconnectExhausted() {
+  handleFatalError(
+    "Reconnect Exhausted",
+    new Error("Reconnect limit reached"),
+    "Reconnect limit reached; stopping cast app.",
+  );
 }
 
 // Generate or get player ID (persisted in localStorage)
@@ -279,11 +344,6 @@ function updateProgressBar(player: SendspinPlayer) {
   window.setProgress?.(progress.positionMs / 1000, progress.durationMs / 1000);
 }
 
-// Track current player state for periodic updates
-let currentPlayerState: {
-  isPlaying: boolean;
-} = { isPlaying: false };
-
 // Connect to Sendspin server
 async function connectToServer(
   baseUrl: string,
@@ -320,59 +380,73 @@ async function connectToServer(
 
   console.log("Sendspin: Using sync delay:", providedSyncDelay, "ms");
 
-  const newPlayer = new SendspinPlayer({
-    playerId,
-    baseUrl,
-    clientName,
-    correctionMode: "sync", // Explicit sync mode for multi-device playback
-    storage: memoryStorage, // Cast doesn't support localStorage
-    syncDelay: providedSyncDelay,
-    bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
-    // Use codecs from sender config, default to PCM for maximum compatibility
-    codecs: providedCodecs ?? DEFAULT_CODECS,
-    // Use hardware volume control (Cast system volume)
-    useHardwareVolume: true,
-    onVolumeCommand: setHardwareVolume,
-    getExternalVolume: getHardwareVolume,
-    useOutputLatencyCompensation: true,
-    onStateChange: (state) => {
-      currentPlayerState = {
-        isPlaying: state.isPlaying,
-      };
-      const hwVol = getHardwareVolume();
+  if (!ensureAudioContextSupported()) {
+    return false;
+  }
 
-      // Update status and playback state
-      window.setStatus?.(state.isPlaying ? "Playing" : "Paused");
-      window.setPlaybackState?.(state.isPlaying);
+  let newPlayer: SendspinPlayer;
+  try {
+    newPlayer = new SendspinPlayer({
+      playerId,
+      baseUrl,
+      clientName,
+      correctionMode: "sync", // Explicit sync mode for multi-device playback
+      storage: memoryStorage, // Cast doesn't support localStorage
+      syncDelay: providedSyncDelay,
+      bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
+      // Use codecs from sender config, default to PCM for maximum compatibility
+      codecs: providedCodecs ?? DEFAULT_CODECS,
+      // Use hardware volume control (Cast system volume)
+      useHardwareVolume: true,
+      onVolumeCommand: setHardwareVolume,
+      getExternalVolume: getHardwareVolume,
+      useOutputLatencyCompensation: true,
+      onStateChange: (state) => {
+        currentPlayerState = {
+          isPlaying: state.isPlaying,
+        };
+        const hwVol = getHardwareVolume();
 
-      // Update volume display (including muted state)
-      window.setVolume?.(hwVol.volume / 100, hwVol.muted);
+        // Update status and playback state
+        window.setStatus?.(state.isPlaying ? "Playing" : "Paused");
+        window.setPlaybackState?.(state.isPlaying);
 
-      // Update now playing UI
-      if (state.serverState.metadata) {
-        window.setNowPlaying?.(
-          toNowPlayingMetadata(state.serverState.metadata),
-        );
+        // Update volume display (including muted state)
+        window.setVolume?.(hwVol.volume / 100, hwVol.muted);
 
-        // Start progress interval if not running
-        if (!progressIntervalId) {
-          progressIntervalId = setInterval(() => {
-            updateProgressBar(newPlayer);
-          }, 200);
+        // Update now playing UI
+        if (state.serverState.metadata) {
+          window.setNowPlaying?.(
+            toNowPlayingMetadata(state.serverState.metadata),
+          );
+
+          // Start progress interval if not running
+          if (!progressIntervalId) {
+            progressIntervalId = setInterval(() => {
+              updateProgressBar(newPlayer);
+            }, 200);
+          }
+        } else {
+          window.setNowPlaying?.(null);
+          window.setProgress?.(0, 0);
+          if (progressIntervalId) {
+            clearInterval(progressIntervalId);
+            progressIntervalId = null;
+          }
         }
-      } else {
-        window.setNowPlaying?.(null);
-        window.setProgress?.(0, 0);
-        if (progressIntervalId) {
-          clearInterval(progressIntervalId);
-          progressIntervalId = null;
-        }
-      }
 
-      sendPlayerStatus(newPlayer);
-      updateDebug(newPlayer);
-    },
-  });
+        sendPlayerStatus(newPlayer);
+        updateDebug(newPlayer);
+      },
+    });
+  } catch (error) {
+    handleFatalError(
+      "Player Setup",
+      error,
+      "Failed to initialize the audio player on this device.",
+    );
+    return false;
+  }
 
   try {
     await newPlayer.connect();
@@ -567,7 +641,11 @@ function tryInitCastReceiver(): boolean {
   );
 
   context.addEventListener(castFramework.system.EventType.ERROR, (event) => {
-    console.error("Sendspin: Cast error:", event);
+    handleFatalError(
+      "Cast Framework Error",
+      event,
+      "Cast receiver reported a fatal framework error.",
+    );
   });
 
   // Listen for custom messages with server URL, player ID, name, and sync delay
