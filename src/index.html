@@ -365,6 +365,7 @@
       const CAST_NAMESPACE = "urn:x-cast:sendspin";
       let castContext = null;
       let castSession = null;
+      let lastReceiverState = null;
       const syncDelayInput = document.getElementById("syncDelay");
 
       // Check if running on localhost
@@ -545,6 +546,7 @@
         </div>`;
         }
 
+        lastReceiverState = data.state;
         setStatus(html);
       }
 
@@ -612,6 +614,9 @@
 
               if (state === cast.framework.SessionState.SESSION_STARTED) {
                 castSession = castContext.getCurrentSession();
+                lastReceiverState = null;
+                document.getElementById("receiverLog").textContent =
+                  "Receiver logs will appear here.";
                 document.getElementById("stopBtn").disabled = false;
                 document.getElementById("castBtn").disabled = true;
 
@@ -651,8 +656,11 @@
                 castSession = null;
                 document.getElementById("stopBtn").disabled = true;
                 document.getElementById("castBtn").disabled = false;
-                document.getElementById("status").textContent = "Ready to cast";
-                document.body.classList.remove("show-logs");
+                if (lastReceiverState !== "error") {
+                  document.getElementById("status").textContent =
+                    "Ready to cast";
+                }
+                lastReceiverState = null;
               }
             },
           );
