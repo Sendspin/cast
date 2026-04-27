@@ -13,7 +13,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@sendspin/sendspin-js": "2.0.3"
+    "@sendspin/sendspin-js": "2.0.6"
   },
   "devDependencies": {
     "@types/chromecast-caf-receiver": "^6.0.25",

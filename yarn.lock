@@ -319,10 +319,10 @@
   resolved "https://registry.yarnpkg.com/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.53.3.tgz#38ae84f4c04226c1d56a3b17296ef1e0460ecdfe"
   integrity sha512-UhTd8u31dXadv0MopwGgNOBpUVROFKWVQgAg5N1ESyCz8AuBcMqm4AuTjrwgQKGDfoFuz02EuMRHQIw/frmYKQ==
 
-"@sendspin/sendspin-js@2.0.3":
-  version "2.0.3"
-  resolved "https://registry.yarnpkg.com/@sendspin/sendspin-js/-/sendspin-js-2.0.3.tgz#15c4b3feaaff30f1c1280cc5b0391001025e354c"
-  integrity sha512-UTNiqMQASqHvpmI9sGhCi+I369WgCQ1xX354ryqeBCC1CfQczHJUhgHhGnfdwLm0ctVYtQgKOyIzJLvM8onT5Q==
+"@sendspin/sendspin-js@2.0.6":
+  version "2.0.6"
+  resolved "https://registry.yarnpkg.com/@sendspin/sendspin-js/-/sendspin-js-2.0.6.tgz#266c878a523be4982ea42bcd31f9ac618b86924c"
+  integrity sha512-bPW1fmauH2Gvn7jZ9umrksljL7UgPRyZ2oZbiJ7PxL6Tcd6TnLLcw0AHvb+DhGFvRkcueXSBm7/u7jmUEfY4Og==
   dependencies:
     opus-encdec "^0.1.1"
 
