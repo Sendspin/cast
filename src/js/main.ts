@@ -904,7 +904,7 @@ function tryInitCafReceiver(): boolean {
         sendPlayerStatus(player);
       } else {
         sendStatusToSender({
-          state: "connected",
+          state: "connecting",
           volume: hwVol.volume,
           muted: hwVol.muted,
         });
@@ -1008,7 +1008,7 @@ function tryInitLegacyReceiver(): boolean {
       sendPlayerStatus(player);
     } else {
       sendStatusToSender({
-        state: "connected",
+        state: "connecting",
         volume: hwVol.volume,
         muted: hwVol.muted,
       });
