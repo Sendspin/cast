@@ -1,6 +1,9 @@
 import { SendspinPlayer, ServerStateMetadata } from "@sendspin/sendspin-js";
 
-const errorAudioUrl = new URL("../assets/error-incompatible.mp3", import.meta.url).href;
+const errorAudioUrl = new URL(
+  "../assets/error-incompatible.mp3",
+  import.meta.url,
+).href;
 
 // Manual type - @types/chromecast-caf-receiver is missing volume methods
 // Matches cast.framework.system.SystemVolumeData from the actual SDK
