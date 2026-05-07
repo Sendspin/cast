@@ -352,13 +352,16 @@ async function ensureAudioContextSupported(): Promise<boolean> {
     return true;
   }
 
-  // Play TTS error message via <audio> element (works without AudioContext).
   try {
     const audio = new Audio(errorAudioUrl);
     const playbackDone = new Promise<void>((resolve) => {
-      audio.onended = () => resolve();
-      audio.onerror = () => resolve();
-      setTimeout(resolve, 15000); // safety timeout
+      const finish = (): void => {
+        clearTimeout(safetyTimer);
+        resolve();
+      };
+      const safetyTimer = setTimeout(finish, 15000);
+      audio.onended = finish;
+      audio.onerror = finish;
     });
     await audio.play();
     await playbackDone;
