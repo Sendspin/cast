@@ -18,6 +18,12 @@
     "castId": "938CBF87"
   },
   {
+    "name": "ma-2.9 branch",
+    "branch": "ma-2.9",
+    "path": "ma-2.9",
+    "castId": "DD107DDB"
+  },
+  {
     "name": "ma-2.8 branch (fallback, delete later)",
     "branch": "ma-2.8",
     "path": ".",
