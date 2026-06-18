@@ -186,10 +186,10 @@
   dependencies:
     tslib "^2.4.0"
 
-"@types/chromecast-caf-receiver@^6.0.25":
-  version "6.0.25"
-  resolved "https://registry.npmjs.org/@types/chromecast-caf-receiver/-/chromecast-caf-receiver-6.0.25.tgz"
-  integrity sha512-76M/NBSEK+2Lc5FCzeUQYnGtn0wK+aBgDjT4JFKhpAOACeM/eoSnKMuND3SQ/ND1vcGgCc6QauNEfXozQOq7Lg==
+"@types/chromecast-caf-receiver@^6.0.26":
+  version "6.0.26"
+  resolved "https://registry.yarnpkg.com/@types/chromecast-caf-receiver/-/chromecast-caf-receiver-6.0.26.tgz#e5e2197506b3cfeac29646eaccf0ba234e207fef"
+  integrity sha512-f+9ocSKTTK1YZUXTznyunnJ2y4JlpUtda5TrL8TtW7ciI77HJiLhxsqDLNgXlZ6muCJGHS+rYp20HdV/bcAS0g==
 
 "@types/esrecurse@^4.3.1":
   version "4.3.1"
