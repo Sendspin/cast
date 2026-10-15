@@ -63,6 +63,13 @@ const STOP_AFTER_ERROR_DELAY_MS = 1000;
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 15000;
 const RECONNECT_MAX_ATTEMPTS = 7;
+const BUFFER_CAPACITY = 1024 * 1024 * 2; // 2MB (GC4A memory constraint)
+// Legacy firmware decodes everything the server sends ahead in one go, which stalls it
+// for seconds at every track start; 512 KB (about 5 s of FLAC) keeps that short.
+const LEGACY_BUFFER_CAPACITY = 1024 * 512;
+// A volume slider sends a command for every step, and legacy firmware stalls on each
+// system volume change, so there only the latest level is applied, at most this often.
+const LEGACY_VOLUME_APPLY_INTERVAL_MS = 250;
 
 function isCodec(value: unknown): value is Codec {
   return (
@@ -94,6 +101,17 @@ interface CastContextWrapper {
 }
 let castContext: CastContextWrapper | null = null;
 let hasSenderConnected = false;
+
+// Set by the legacy build (legacy.ts), which only runs on Cast firmware older than
+// Chrome 80 and so on much slower hardware.
+let legacyDevice = false;
+let pendingVolume: { volume: number; muted: boolean } | null = null;
+let volumeTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Tune the receiver for the slower devices that run the legacy build. */
+export function useLegacyDeviceSettings(): void {
+  legacyDevice = true;
+}
 
 const LOG_LEVELS = { off: 0, error: 1, warn: 2, info: 3, debug: 4 } as const;
 type LogLevel = keyof typeof LOG_LEVELS;
@@ -233,6 +251,13 @@ function getHardwareVolume(): { volume: number; muted: boolean } {
 // Set hardware volume via Cast system
 // Silently no-ops if methods unavailable on device
 function setHardwareVolume(volume: number, muted: boolean): void {
+  if (legacyDevice) {
+    pendingVolume = { volume, muted };
+    if (volumeTimer === null) {
+      applyPendingVolume();
+    }
+    return;
+  }
   if (!castContext) return;
 
   // Cast API uses 0.0-1.0 for volume level
@@ -243,6 +268,33 @@ function setHardwareVolume(volume: number, muted: boolean): void {
     castContext.setSystemVolumeMuted(muted);
   }
   console.log("Sendspin: Set hardware volume:", volume, "muted:", muted);
+}
+
+// Legacy build: apply the latest requested volume, then hold off the next one
+function applyPendingVolume(): void {
+  const target = pendingVolume;
+  pendingVolume = null;
+  if (!target || !castContext) {
+    volumeTimer = null;
+    return;
+  }
+
+  if (castContext.setSystemVolumeLevel) {
+    castContext.setSystemVolumeLevel(target.volume / 100);
+  }
+  if (
+    castContext.setSystemVolumeMuted &&
+    target.muted !== getHardwareVolume().muted
+  ) {
+    castContext.setSystemVolumeMuted(target.muted);
+  }
+  console.log(
+    "Sendspin: Set hardware volume:",
+    target.volume,
+    "muted:",
+    target.muted,
+  );
+  volumeTimer = setTimeout(applyPendingVolume, LEGACY_VOLUME_APPLY_INTERVAL_MS);
 }
 
 // Send status update to sender
@@ -505,7 +557,7 @@ async function connectToServer(baseUrl: string): Promise<boolean> {
       correctionMode: "sync", // Explicit sync mode for multi-device playback
       storage: memoryStorage, // Cast doesn't support localStorage
       syncDelay: providedSyncDelay,
-      bufferCapacity: 1024 * 1024 * 2, // 2MB (GC4A memory constraint)
+      bufferCapacity: legacyDevice ? LEGACY_BUFFER_CAPACITY : BUFFER_CAPACITY,
       // Use codecs from sender config, default to PCM for maximum compatibility.
       // Advertise all known codecs but with the preferred one(s) first.
       codecs: buildCodecList(providedCodecs ?? DEFAULT_CODECS),

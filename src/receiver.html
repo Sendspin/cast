@@ -442,10 +442,9 @@
 
       window.setPlaybackIcon = function (isPlaying) {
         // Show pause icon when playing, play icon when paused (standard convention)
-        playbackPath.setAttribute(
-          "d",
-          isPlaying ? pauseIconPath : playIconPath,
-        );
+        // (kept to one line: a trailing comma in a call needs Chrome 58)
+        var iconPath = isPlaying ? pauseIconPath : playIconPath;
+        playbackPath.setAttribute("d", iconPath);
       };
 
       var _lastPlaybackPlaying = null;
@@ -554,5 +553,24 @@
       };
     </script>
     <script type="module" src="./js/main.ts"></script>
+    <script>
+      // Cast firmware with an older Chromium (e.g. Cast 1.28) can't parse the module
+      // above, so it never runs there; load the transpiled legacy build instead. Wait
+      // for DOMContentLoaded: by then the module's syntax error has been reported, so it
+      // can't reach the error handler the legacy build installs.
+      (function () {
+        try {
+          new Function("return a?.b ?? c");
+          return;
+        } catch (e) {
+          // no optional chaining or nullish coalescing: older than Chrome 80
+        }
+        document.addEventListener("DOMContentLoaded", function () {
+          var script = document.createElement("script");
+          script.src = "./assets/receiver-legacy.js";
+          document.body.appendChild(script);
+        });
+      })();
+    </script>
   </body>
 </html>

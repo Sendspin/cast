@@ -13,6 +13,8 @@ export default defineConfig({
   build: {
     // Cast devices can run older Chromium runtimes. Keep syntax conservative
     // so the receiver app can parse and boot on legacy firmware.
+    // Devices older than this get the legacy build (vite.legacy.config.ts) instead:
+    // keep the syntax check that picks it in receiver.html in step with this target.
     target: "chrome80",
     outDir: resolve(__dirname, "dist"),
     emptyOutDir: true,

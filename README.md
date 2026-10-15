@@ -33,6 +33,7 @@ yarn preview
 - The sender page (`dist/index.html`) lets you enter the Sendspin server host, preferred codec, and sync delay.
 - When you cast, it launches the receiver app (`dist/receiver.html`) on the Cast device and sends a message over the custom namespace `urn:x-cast:sendspin` with `{ serverUrl, codecs, syncDelay }`.
 - The receiver creates a Sendspin JS SDK player, connects to `${serverUrl}/sendspin`, and streams audio directly to the device using Web Audio (direct output mode) with hardware volume integration.
+- Cast firmware with a Chromium older than 80 (e.g. Cast 1.28 on older third-party speakers) can't parse the receiver bundle. On those devices `receiver.html` loads `dist/assets/receiver-legacy.js` instead: the same receiver as a classic ES2015 script with a few polyfills, built by `vite.legacy.config.ts`. Up-to-date devices never load it.
 
 ## Cast Message Protocol
 
